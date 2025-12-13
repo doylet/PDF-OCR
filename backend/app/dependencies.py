@@ -2,9 +2,12 @@ from google.cloud import storage
 from google.cloud import firestore
 from google.cloud import documentai_v1 as documentai
 from google.cloud import tasks_v2
+from google.oauth2 import service_account
 from app.config import get_settings
 from typing import Optional
 import logging
+import os
+import json
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -17,12 +20,32 @@ class GCPClients:
     _firestore_client: Optional[firestore.Client] = None
     _documentai_client: Optional[documentai.DocumentProcessorServiceClient] = None
     _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
+    _credentials: Optional[service_account.Credentials] = None
+    
+    @classmethod
+    def get_credentials(cls) -> Optional[service_account.Credentials]:
+        """Get service account credentials from mounted secret if available"""
+        if cls._credentials is None:
+            # Check if service account key is mounted as a secret
+            key_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '/secrets/service-account-key.json')
+            if os.path.exists(key_path):
+                try:
+                    cls._credentials = service_account.Credentials.from_service_account_file(key_path)
+                    logger.info(f"Loaded service account credentials from {key_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to load service account key from {key_path}: {e}")
+        return cls._credentials
     
     @classmethod
     def get_storage_client(cls) -> storage.Client:
         if cls._storage_client is None:
-            cls._storage_client = storage.Client(project=settings.gcp_project_id)
-            logger.info("Initialized Cloud Storage client")
+            credentials = cls.get_credentials()
+            if credentials:
+                cls._storage_client = storage.Client(project=settings.gcp_project_id, credentials=credentials)
+                logger.info("Initialized Cloud Storage client with service account credentials")
+            else:
+                cls._storage_client = storage.Client(project=settings.gcp_project_id)
+                logger.info("Initialized Cloud Storage client with default credentials")
         return cls._storage_client
     
     @classmethod

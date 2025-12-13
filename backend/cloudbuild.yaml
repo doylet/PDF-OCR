@@ -22,7 +22,9 @@ steps:
       - '--min-instances'
       - '0'
       - '--set-env-vars'
-      - 'GCP_PROJECT_ID=${PROJECT_ID},GCP_PROCESSOR_ID=${_GCP_PROCESSOR_ID},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},API_KEY=${_API_KEY},GCP_LOCATION=us,FIRESTORE_COLLECTION=extraction_jobs,CORS_ORIGINS=${_CORS_ORIGINS}'
+      - 'GCP_PROJECT_ID=${PROJECT_ID},GCP_PROCESSOR_ID=${_GCP_PROCESSOR_ID},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},API_KEY=${_API_KEY},GCP_LOCATION=us,FIRESTORE_COLLECTION=extraction_jobs,CORS_ORIGINS=${_CORS_ORIGINS},GOOGLE_APPLICATION_CREDENTIALS=/secrets/service-account-key.json'
+      - '--set-secrets'
+      - '/secrets/service-account-key.json=pdf-ocr-service-account-key:latest'
 
 substitutions:
   _GCP_PROCESSOR_ID: '785c0d6231d28978'
