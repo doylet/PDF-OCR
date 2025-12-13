@@ -11,7 +11,9 @@ steps:
       - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:${BUILD_ID}'
       - '-t'
       - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:latest'
-      - '.'
+      - '-f'
+      - 'frontend/Dockerfile'
+      - 'frontend'
   
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'

@@ -7,7 +7,7 @@ steps:
       - 'deploy'
       - 'pdf-ocr-api'
       - '--source'
-      - '.'
+      - 'backend'
       - '--platform'
       - 'managed'
       - '--region'
