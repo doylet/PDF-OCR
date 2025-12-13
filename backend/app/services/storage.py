@@ -1,9 +1,13 @@
 from google.cloud import storage
+from google.auth.transport import requests
+from google.auth import compute_engine
 from app.config import get_settings
 from app.dependencies import get_storage_client
 import uuid
 import logging
 from typing import Tuple
+from datetime import datetime, timedelta
+import google.auth
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -29,19 +33,34 @@ class StorageService:
             raise
     
     def generate_upload_url(self, file_name: str) -> Tuple[str, str]:
-        """Generate a signed URL for PDF upload"""
+        """Generate a signed URL for PDF upload using IAM signBlob"""
+        from google.auth import iam
+        from google.auth.transport import requests as auth_requests
+        
         pdf_id = str(uuid.uuid4())
         blob_name = f"{settings.gcs_pdf_folder}/{pdf_id}/{file_name}"
         
         bucket = self.get_bucket()
         blob = bucket.blob(blob_name)
         
+        # Use IAM-based signing for environments without service account keys
+        credentials, project = google.auth.default()
+        
+        # Create a signing credentials object that uses IAM signBlob API
+        auth_request = auth_requests.Request()
+        signing_credentials = iam.Signer(
+            auth_request,
+            credentials,
+            credentials.service_account_email if hasattr(credentials, 'service_account_email') else f"{project}@appspot.gserviceaccount.com"
+        )
+        
         # Generate signed URL (valid for 1 hour)
         upload_url = blob.generate_signed_url(
             version="v4",
-            expiration=3600,
+            expiration=timedelta(hours=1),
             method="PUT",
-            content_type="application/pdf"
+            content_type="application/pdf",
+            credentials=signing_credentials
         )
         
         logger.info(f"Generated upload URL for PDF: {pdf_id}")
