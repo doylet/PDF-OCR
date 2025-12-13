@@ -23,15 +23,40 @@ class FormatterService:
             if not line:
                 continue
             
-            # Try to split by multiple spaces (common in OCR text)
-            parts = re.split(r'\s{2,}', line)
-            if len(parts) > 1:
+            # First try: split by multiple spaces (most reliable for OCR)
+            parts = re.split(r'\s{3,}', line)
+            if len(parts) >= 2:
                 table_data.append(parts)
-            else:
-                # Fallback: split by single space if we have date-like patterns
-                parts = line.split()
-                if len(parts) >= 2:
-                    table_data.append(parts)
+                continue
+            
+            # Second try: Look for data patterns like "DD Mon Description Value"
+            # Pattern: date (2 digits), month (3 letters), description (words), value (number + unit)
+            match = re.match(r'^(\d{1,2}\s+\w+)\s+(.*?)\s+(\d+[\d.,]*(?:MB|GB|KB)?)$', line, re.IGNORECASE)
+            if match:
+                table_data.append([match.group(1), match.group(2), match.group(3)])
+                continue
+            
+            # Third try: split by 2 or more spaces
+            parts = re.split(r'\s{2,}', line)
+            if len(parts) >= 2:
+                table_data.append(parts)
+                continue
+            
+            # Last resort: if line has date-like pattern at start, try to split intelligently
+            parts = line.split()
+            if len(parts) >= 3 and re.match(r'^\d{1,2}$', parts[0]):
+                # Likely: "DD Mon Description [Value]"
+                date = f"{parts[0]} {parts[1]}" if len(parts) > 1 else parts[0]
+                remaining = parts[2:]
+                if remaining:
+                    # Last part might be the value if it looks like a number
+                    if re.match(r'^\d+[\d.,]*(?:MB|GB|KB)?$', remaining[-1], re.IGNORECASE):
+                        value = remaining[-1]
+                        description = ' '.join(remaining[:-1]) if len(remaining) > 1 else ''
+                        table_data.append([date, description, value])
+                    else:
+                        description = ' '.join(remaining)
+                        table_data.append([date, description, ''])
         
         return table_data if table_data else None
     
