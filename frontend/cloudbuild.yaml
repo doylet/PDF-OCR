@@ -43,3 +43,6 @@ images:
 substitutions:
   _API_URL: 'https://pdf-ocr-api-e3b7ctuuxa-uc.a.run.app'
   _API_KEY: 'M3CIlxn7kDnBSRy5OeDn1m36EkF1YTD9iaQqZiB02ys='
+
+options:
+  logging: CLOUD_LOGGING_ONLY

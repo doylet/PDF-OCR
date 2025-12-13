@@ -29,3 +29,6 @@ substitutions:
   _GCS_BUCKET_NAME: 'pdf-ocr-mvp'
   _API_KEY: 'M3CIlxn7kDnBSRy5OeDn1m36EkF1YTD9iaQqZiB02ys='
   _CORS_ORIGINS: 'http://localhost:3000 https://pdf-ocr-frontend-785693222332.us-central1.run.app'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
