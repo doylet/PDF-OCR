@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Header
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Header, Request
 from app.models import ExtractionRequest, JobStatus
 from app.services.jobs import job_service
 from app.services.storage import storage_service
@@ -55,9 +55,10 @@ async def process_extraction(job_id: str, request: ExtractionRequest):
 
 @router.post("/", response_model=JobStatus)
 async def create_extraction_job(
-    request: ExtractionRequest,
+    extraction_request: ExtractionRequest,
     background_tasks: BackgroundTasks,
-    api_key: str = Header(..., alias="X-API-Key")
+    request: Request,
+    api_key: str = Header(None, alias="X-API-Key")
 ):
     """
     Create an extraction job for processing PDF regions
@@ -66,9 +67,11 @@ async def create_extraction_job(
     - **regions**: List of regions to extract (with coordinates and page numbers)
     - **output_format**: Desired output format (csv, tsv, or json)
     """
-    verify_api_key(api_key)
+    # Skip API key check for OPTIONS preflight requests
+    if request.method != "OPTIONS":
+        verify_api_key(api_key if api_key else "")
     
-    if not request.regions:
+    if not extraction_request.regions:
         raise HTTPException(status_code=400, detail="At least one region is required")
     
     try:
@@ -76,10 +79,10 @@ async def create_extraction_job(
         job_id = str(uuid.uuid4())
         
         # Create job in Firestore
-        job = job_service.create_job(job_id, request.pdf_id, len(request.regions))
+        job = job_service.create_job(job_id, extraction_request.pdf_id, len(extraction_request.regions))
         
         # Add background task for processing
-        background_tasks.add_task(process_extraction, job_id, request)
+        background_tasks.add_task(process_extraction, job_id, extraction_request)
         
         return job
     
@@ -91,14 +94,17 @@ async def create_extraction_job(
 @router.get("/{job_id}", response_model=JobStatus)
 async def get_job_status(
     job_id: str,
-    api_key: str = Header(..., alias="X-API-Key")
+    request: Request,
+    api_key: str = Header(None, alias="X-API-Key")
 ):
     """
     Get the status of an extraction job
     
     - **job_id**: ID of the extraction job
     """
-    verify_api_key(api_key)
+    # Skip API key check for OPTIONS preflight requests
+    if request.method != "OPTIONS":
+        verify_api_key(api_key if api_key else "")
     
     job = job_service.get_job(job_id)
     

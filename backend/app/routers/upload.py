@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Request
 from app.models import UploadResponse
 from app.services.storage import storage_service
 from app.config import get_settings
@@ -19,14 +19,17 @@ def verify_api_key(x_api_key: str = Header(...)):
 @router.post("/generate-url", response_model=UploadResponse)
 async def generate_upload_url(
     file_name: str,
-    api_key: str = Header(..., alias="X-API-Key")
+    request: Request,
+    api_key: str = Header(None, alias="X-API-Key")
 ):
     """
     Generate a signed URL for uploading a PDF
     
     - **file_name**: Name of the PDF file to upload
     """
-    verify_api_key(api_key)
+    # Skip API key check for OPTIONS preflight requests
+    if request.method != "OPTIONS":
+        verify_api_key(api_key if api_key else "")
     
     try:
         pdf_id, upload_url = storage_service.generate_upload_url(file_name)
