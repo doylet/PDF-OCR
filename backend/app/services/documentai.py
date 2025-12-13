@@ -97,13 +97,26 @@ class DocumentAIService:
             if hasattr(page, 'tables'):
                 for table in page.tables:
                     table_data = []
+                    
+                    # Add header rows first
+                    if hasattr(table, 'header_rows'):
+                        for row in table.header_rows:
+                            row_data = []
+                            for cell in row.cells:
+                                cell_text = self._get_text_from_layout(document.text, cell.layout)
+                                row_data.append(cell_text)
+                            table_data.append(row_data)
+                    
+                    # Add body rows
                     for row in table.body_rows:
                         row_data = []
                         for cell in row.cells:
                             cell_text = self._get_text_from_layout(document.text, cell.layout)
                             row_data.append(cell_text)
                         table_data.append(row_data)
-                    structured_data["tables"].append(table_data)
+                    
+                    if table_data:  # Only add non-empty tables
+                        structured_data["tables"].append(table_data)
         
         # Extract form fields
         for page in document.pages:
