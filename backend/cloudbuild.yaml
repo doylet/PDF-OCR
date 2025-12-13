@@ -1,0 +1,31 @@
+steps:
+  # Build and deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'pdf-ocr-api'
+      - '--source'
+      - '.'
+      - '--platform'
+      - 'managed'
+      - '--region'
+      - 'us-central1'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '1Gi'
+      - '--timeout'
+      - '300'
+      - '--max-instances'
+      - '10'
+      - '--min-instances'
+      - '0'
+      - '--set-env-vars'
+      - 'GCP_PROJECT_ID=${PROJECT_ID},GCP_PROCESSOR_ID=${_GCP_PROCESSOR_ID},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},API_KEY=${_API_KEY},GCP_LOCATION=us,FIRESTORE_COLLECTION=extraction_jobs,CORS_ORIGINS=${_CORS_ORIGINS}'
+
+substitutions:
+  _GCP_PROCESSOR_ID: '785c0d6231d28978'
+  _GCS_BUCKET_NAME: 'pdf-ocr-mvp'
+  _API_KEY: 'M3CIlxn7kDnBSRy5OeDn1m36EkF1YTD9iaQqZiB02ys='
+  _CORS_ORIGINS: 'http://localhost:3000 https://pdf-ocr-frontend-785693222332.us-central1.run.app'

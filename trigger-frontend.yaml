@@ -1,0 +1,10 @@
+name: deploy-frontend
+description: Deploy frontend on push to main
+github:
+  owner: doylet
+  name: PDF-OCR
+  push:
+    branch: ^main$
+includedFiles:
+  - frontend/**
+filename: frontend/cloudbuild.yaml
