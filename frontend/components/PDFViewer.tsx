@@ -32,11 +32,21 @@ export default function PDFViewer({
   const [currentRect, setCurrentRect] = useState<Region | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1.0);
+  const [pageDimensions, setPageDimensions] = useState<{ width: number; height: number } | null>(null);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
     onPageChange(1);
+  }
+
+  function onPageLoadSuccess(page: any) {
+    const viewport = page.getViewport({ scale: 1.0 });
+    setPageDimensions({
+      width: viewport.width,
+      height: viewport.height
+    });
   }
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -74,8 +84,29 @@ export default function PDFViewer({
   };
 
   const handleMouseUp = () => {
-    if (currentRect && currentRect.width > 10 && currentRect.height > 10) {
-      onRegionAdd(currentRect);
+    if (currentRect && currentRect.width > 10 && currentRect.height > 10 && pageDimensions) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      // Convert canvas coordinates to PDF coordinates at 200 DPI
+      // PDF coordinates are based on the actual page dimensions
+      // Canvas displays the page at a certain scale
+      const dpi = 200;
+      const pdfWidthInPixels = (pageDimensions.width / 72) * dpi; // PDF points to pixels at 200 DPI
+      const pdfHeightInPixels = (pageDimensions.height / 72) * dpi;
+      
+      const scaleX = pdfWidthInPixels / canvas.width;
+      const scaleY = pdfHeightInPixels / canvas.height;
+      
+      const pdfRegion: Region = {
+        x: currentRect.x * scaleX,
+        y: currentRect.y * scaleY,
+        width: currentRect.width * scaleX,
+        height: currentRect.height * scaleY,
+        page: currentPage
+      };
+      
+      onRegionAdd(pdfRegion);
     }
     setIsDrawing(false);
     setStartPoint(null);
@@ -169,17 +200,19 @@ export default function PDFViewer({
                 scale={scale}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
+                onLoadSuccess={onPageLoadSuccess}
+                inputRef={pageRef}
               />
             </Document>
             <canvas
               ref={canvasRef}
               className="absolute top-0 left-0 cursor-crosshair"
               style={{
-                width: `${800 * scale}px`,
-                height: `${1035 * scale}px`,
+                width: pageDimensions ? `${pageDimensions.width * scale}px` : '800px',
+                height: pageDimensions ? `${pageDimensions.height * scale}px` : '1035px',
               }}
-              width={800 * scale}
-              height={1035 * scale}
+              width={pageDimensions ? pageDimensions.width * scale : 800}
+              height={pageDimensions ? pageDimensions.height * scale : 1035}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
