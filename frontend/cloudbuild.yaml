@@ -1,0 +1,45 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_URL=${_API_URL}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_KEY=${_API_KEY}'
+      - '-t'
+      - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:${BUILD_ID}'
+      - '-t'
+      - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:latest'
+      - '.'
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:${BUILD_ID}']
+  
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'pdf-ocr-frontend'
+      - '--image'
+      - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:${BUILD_ID}'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '512Mi'
+      - '--set-env-vars'
+      - 'NEXT_PUBLIC_API_URL=${_API_URL},NEXT_PUBLIC_API_KEY=${_API_KEY}'
+
+images:
+  - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:${BUILD_ID}'
+  - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:latest'
+
+substitutions:
+  _API_URL: 'https://pdf-ocr-api-e3b7ctuuxa-uc.a.run.app'
+  _API_KEY: 'M3CIlxn7kDnBSRy5OeDn1m36EkF1YTD9iaQqZiB02ys='

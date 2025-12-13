@@ -1,0 +1,1 @@
+CORS_ORIGINS: "http://localhost:3000,https://pdf-ocr-frontend-e3b7ctuuxa-uc.a.run.app"

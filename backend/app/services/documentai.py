@@ -1,0 +1,177 @@
+from google.cloud import documentai_v1 as documentai
+from app.config import get_settings
+from app.dependencies import get_documentai_client
+from app.models import Region, ExtractionResult
+from pypdf import PdfReader, PdfWriter
+from pdf2image import convert_from_bytes
+from PIL import Image
+import io
+import logging
+from typing import List
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+class DocumentAIService:
+    """Service for Document AI processing"""
+    
+    def __init__(self):
+        self.client = get_documentai_client()
+        self.processor_name = f"projects/{settings.gcp_project_id}/locations/{settings.gcp_location}/processors/{settings.gcp_processor_id}"
+    
+    def crop_pdf_region(self, pdf_bytes: bytes, region: Region) -> bytes:
+        """Crop a region from a PDF page and return as image bytes"""
+        try:
+            # Convert PDF page to image
+            images = convert_from_bytes(
+                pdf_bytes,
+                first_page=region.page,
+                last_page=region.page,
+                dpi=200
+            )
+            
+            if not images:
+                raise ValueError(f"Could not convert page {region.page} to image")
+            
+            image = images[0]
+            
+            # Crop the region
+            left = int(region.x)
+            top = int(region.y)
+            right = int(region.x + region.width)
+            bottom = int(region.y + region.height)
+            
+            cropped_image = image.crop((left, top, right, bottom))
+            
+            # Convert to bytes
+            img_byte_arr = io.BytesIO()
+            cropped_image.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            
+            return img_byte_arr.getvalue()
+        
+        except Exception as e:
+            logger.error(f"Error cropping PDF region: {e}")
+            raise
+    
+    def process_document(self, document_bytes: bytes, mime_type: str = "image/png") -> documentai.Document:
+        """Process document with Document AI"""
+        try:
+            raw_document = documentai.RawDocument(
+                content=document_bytes,
+                mime_type=mime_type
+            )
+            
+            request = documentai.ProcessRequest(
+                name=self.processor_name,
+                raw_document=raw_document
+            )
+            
+            result = self.client.process_document(request=request)
+            return result.document
+        
+        except Exception as e:
+            logger.error(f"Error processing document with Document AI: {e}")
+            raise
+    
+    def extract_text_from_document(self, document: documentai.Document) -> tuple[str, float]:
+        """Extract text and confidence from Document AI result"""
+        text = document.text
+        
+        # Calculate average confidence
+        confidences = [page.layout.confidence for page in document.pages if hasattr(page.layout, 'confidence')]
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        
+        return text, avg_confidence
+    
+    def extract_structured_data(self, document: documentai.Document) -> dict:
+        """Extract structured data (tables, form fields) from Document AI result"""
+        structured_data = {
+            "tables": [],
+            "form_fields": []
+        }
+        
+        # Extract tables
+        for page in document.pages:
+            if hasattr(page, 'tables'):
+                for table in page.tables:
+                    table_data = []
+                    for row in table.body_rows:
+                        row_data = []
+                        for cell in row.cells:
+                            cell_text = self._get_text_from_layout(document.text, cell.layout)
+                            row_data.append(cell_text)
+                        table_data.append(row_data)
+                    structured_data["tables"].append(table_data)
+        
+        # Extract form fields
+        for page in document.pages:
+            if hasattr(page, 'form_fields'):
+                for field in page.form_fields:
+                    field_name = self._get_text_from_layout(document.text, field.field_name)
+                    field_value = self._get_text_from_layout(document.text, field.field_value)
+                    structured_data["form_fields"].append({
+                        "name": field_name,
+                        "value": field_value
+                    })
+        
+        return structured_data
+    
+    def _get_text_from_layout(self, full_text: str, layout) -> str:
+        """Extract text from a layout element"""
+        if not hasattr(layout, 'text_anchor') or not layout.text_anchor.text_segments:
+            return ""
+        
+        text_segments = []
+        for segment in layout.text_anchor.text_segments:
+            start = int(segment.start_index) if hasattr(segment, 'start_index') else 0
+            end = int(segment.end_index) if hasattr(segment, 'end_index') else len(full_text)
+            text_segments.append(full_text[start:end])
+        
+        return "".join(text_segments).strip()
+    
+    def process_regions(self, pdf_bytes: bytes, regions: List[Region]) -> List[ExtractionResult]:
+        """Process multiple regions and return extraction results"""
+        results = []
+        
+        for idx, region in enumerate(regions):
+            try:
+                # Crop region
+                cropped_bytes = self.crop_pdf_region(pdf_bytes, region)
+                
+                # Process with Document AI
+                document = self.process_document(cropped_bytes)
+                
+                # Extract text and confidence
+                text, confidence = self.extract_text_from_document(document)
+                
+                # Extract structured data
+                structured_data = self.extract_structured_data(document)
+                
+                result = ExtractionResult(
+                    region_index=idx,
+                    page=region.page,
+                    text=text,
+                    confidence=confidence,
+                    structured_data=structured_data if structured_data["tables"] or structured_data["form_fields"] else None
+                )
+                
+                results.append(result)
+                logger.info(f"Processed region {idx} on page {region.page}")
+            
+            except Exception as e:
+                logger.error(f"Error processing region {idx}: {e}")
+                # Add error result
+                results.append(ExtractionResult(
+                    region_index=idx,
+                    page=region.page,
+                    text=f"ERROR: {str(e)}",
+                    confidence=0.0,
+                    structured_data=None
+                ))
+        
+        return results
+
+
+documentai_service = DocumentAIService()
