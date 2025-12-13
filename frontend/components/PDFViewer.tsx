@@ -41,7 +41,7 @@ export default function PDFViewer({
     onPageChange(1);
   }
 
-  function onPageLoadSuccess(page: any) {
+  function onPageLoadSuccess(page: { getViewport: (options: { scale: number }) => { width: number; height: number } }) {
     const viewport = page.getViewport({ scale: 1.0 });
     setPageDimensions({
       width: viewport.width,
