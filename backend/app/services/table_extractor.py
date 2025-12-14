@@ -32,67 +32,72 @@ class TableExtractionService:
             List of rows (each row is a list of cell values), or None if no tables found
         """
         try:
-            # Save PDF bytes to a temporary file-like object
-            pdf_file = io.BytesIO(pdf_bytes)
+            import tempfile
+            import os
             
-            # Convert pixel coordinates (200 DPI) to PDF points (72 DPI)
-            # PDF coordinates are from bottom-left, so we need page height
-            reader = PdfReader(pdf_file)
-            pdf_page = reader.pages[page - 1]  # 0-indexed
-            page_height_points = float(pdf_page.mediabox.height)
+            # Camelot requires a file path, not BytesIO - write to temp file
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False) as tmp_file:
+                tmp_file.write(pdf_bytes)
+                tmp_path = tmp_file.name
             
-            # Convert coordinates
-            dpi_ratio = 72 / 200  # Convert from 200 DPI to 72 DPI points
-            left = x * dpi_ratio
-            top = page_height_points - (y * dpi_ratio)  # Flip Y axis
-            right = (x + width) * dpi_ratio
-            bottom = page_height_points - ((y + height) * dpi_ratio)  # Flip Y axis
-            
-            # Camelot table_areas format: "x1,y1,x2,y2" where y is from bottom
-            table_area = f"{left},{bottom},{right},{top}"
-            
-            logger.info(f"Extracting tables from page {page} area: {table_area}")
-            
-            # Reset file pointer
-            pdf_file.seek(0)
-            
-            # Try lattice mode first (for tables with visible borders)
             try:
-                tables = camelot.read_pdf(
-                    pdf_file,
-                    pages=str(page),
-                    flavor='lattice',
-                    table_areas=[table_area],
-                    strip_text='\n'
-                )
+                # Convert pixel coordinates (200 DPI) to PDF points (72 DPI)
+                # PDF coordinates are from bottom-left, so we need page height
+                pdf_file = io.BytesIO(pdf_bytes)
+                reader = PdfReader(pdf_file)
+                pdf_page = reader.pages[page - 1]  # 0-indexed
+                page_height_points = float(pdf_page.mediabox.height)
                 
-                if tables and len(tables) > 0 and len(tables[0].df) > 0:
-                    logger.info(f"Lattice mode found {len(tables)} table(s)")
-                    return TableExtractionService._convert_tables_to_rows(tables)
-            except Exception as e:
-                logger.warning(f"Lattice mode failed: {e}")
-            
-            # Reset file pointer for stream mode
-            pdf_file.seek(0)
-            
-            # Try stream mode (for tables without visible borders)
-            try:
-                tables = camelot.read_pdf(
-                    pdf_file,
-                    pages=str(page),
-                    flavor='stream',
-                    table_areas=[table_area],
-                    strip_text='\n',
-                    edge_tol=50,  # More lenient edge tolerance
-                    row_tol=10,   # Row tolerance
-                    column_tol=5  # Column tolerance
-                )
+                # Convert coordinates
+                dpi_ratio = 72 / 200  # Convert from 200 DPI to 72 DPI points
+                left = x * dpi_ratio
+                top = page_height_points - (y * dpi_ratio)  # Flip Y axis
+                right = (x + width) * dpi_ratio
+                bottom = page_height_points - ((y + height) * dpi_ratio)  # Flip Y axis
                 
-                if tables and len(tables) > 0 and len(tables[0].df) > 0:
-                    logger.info(f"Stream mode found {len(tables)} table(s)")
-                    return TableExtractionService._convert_tables_to_rows(tables)
-            except Exception as e:
-                logger.warning(f"Stream mode failed: {e}")
+                # Camelot table_areas format: "x1,y1,x2,y2" where y is from bottom
+                table_area = f"{left},{bottom},{right},{top}"
+                
+                logger.info(f"Extracting tables from page {page} area: {table_area}")
+                
+                # Try lattice mode first (for tables with visible borders)
+                try:
+                    tables = camelot.read_pdf(
+                        tmp_path,
+                        pages=str(page),
+                        flavor='lattice',
+                        table_areas=[table_area],
+                        strip_text='\n'
+                    )
+                    
+                    if tables and len(tables) > 0 and len(tables[0].df) > 0:
+                        logger.info(f"Lattice mode found {len(tables)} table(s)")
+                        return TableExtractionService._convert_tables_to_rows(tables)
+                except Exception as e:
+                    logger.warning(f"Lattice mode failed: {e}")
+                
+                # Try stream mode (for tables without visible borders)
+                try:
+                    tables = camelot.read_pdf(
+                        tmp_path,
+                        pages=str(page),
+                        flavor='stream',
+                        table_areas=[table_area],
+                        strip_text='\n',
+                        edge_tol=50,  # More lenient edge tolerance
+                        row_tol=10,   # Row tolerance
+                        column_tol=5  # Column tolerance
+                    )
+                    
+                    if tables and len(tables) > 0 and len(tables[0].df) > 0:
+                        logger.info(f"Stream mode found {len(tables)} table(s)")
+                        return TableExtractionService._convert_tables_to_rows(tables)
+                except Exception as e:
+                    logger.warning(f"Stream mode failed: {e}")
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
             
             logger.warning("No tables detected by Camelot")
             return None
