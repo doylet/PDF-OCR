@@ -37,86 +37,62 @@ class TextParser:
     @staticmethod
     def _parse_column_layout(lines: List[str]) -> Optional[List[List[str]]]:
         """
-        Parse vertical column layout where headers appear first,
-        then all values for column 1, then all values for column 2, etc.
+        Parse text by detecting date + volume patterns and pairing them into rows.
         
-        Example:
-        Date\n06 Oct\n07 Oct\n...\nDescription\nData Usage\nData Usage\n...\nVolume\n671MB\n337MB...
+        Handles format where dates and volumes are mixed:
+        06 Oct\nData Usage\n671.33MB\n07 Oct\nData Usage\n337.87MB...
         """
-        # Find potential column headers - typically capitalized words, no digits
-        header_indices = []
+        import re
+        
+        # Detect dates (dd Mon format)
+        date_pattern = re.compile(r'^\d{1,2}\s+[A-Z][a-z]{2}$')
+        # Detect volumes (number + MB/GB/KB)
+        volume_pattern = re.compile(r'^\d+(\.\d+)?(MB|GB|KB)$', re.IGNORECASE)
+        
+        # Find all dates and volumes with their line indices
+        dates = []
+        volumes = []
+        descriptions = []
         
         for i, line in enumerate(lines):
-            # Header patterns:
-            # - Single capitalized word: "Date", "Volume", "Description"
-            # - Two capitalized words: "Data Usage"
-            # - No leading digits
-            words = line.split()
-            if (len(words) <= 3 and 
-                line[0].isupper() and 
-                not any(char.isdigit() for char in line[:3])):
-                header_indices.append(i)
+            if date_pattern.match(line):
+                dates.append((i, line))
+            elif volume_pattern.match(line):
+                volumes.append((i, line))
+            elif 'usage' in line.lower() or 'data' in line.lower():
+                descriptions.append((i, line))
         
-        # Need at least 2 columns
-        if len(header_indices) < 2:
+        # Need at least some dates and volumes
+        if len(dates) < 2 or len(volumes) < 2:
+            logger.debug(f"Not enough dates ({len(dates)}) or volumes ({len(volumes)}) for row parsing")
             return None
         
-        # Check if headers are reasonably spaced (not consecutive)
-        if all(header_indices[i+1] - header_indices[i] <= 2 for i in range(len(header_indices)-1)):
-            # Headers too close together, probably not column headers
-            return None
+        # Build rows by pairing dates with their nearest following volume
+        table = [["Date", "Description", "Volume"]]
         
-        # Extract headers
-        headers = [lines[i] for i in header_indices]
-        
-        # Calculate rows per column
-        # Assume equal distribution of data across columns
-        total_data_lines = len(lines) - len(header_indices)
-        rows_per_column = total_data_lines // len(header_indices)
-        
-        if rows_per_column == 0:
-            return None
-        
-        # Build data array - track current position after headers
-        data_sections = []
-        current_pos = 0
-        
-        for i, header_idx in enumerate(header_indices):
-            # Skip to next section (after current header)
-            section_start = header_idx + 1
+        for date_idx, date_text in dates:
+            # Find the next volume after this date
+            next_volume = None
+            for vol_idx, vol_text in volumes:
+                if vol_idx > date_idx:
+                    next_volume = vol_text
+                    break
             
-            # Find section end (next header or end of list)
-            if i < len(header_indices) - 1:
-                section_end = header_indices[i + 1]
-            else:
-                section_end = len(lines)
+            # Find description between date and volume
+            description = "Data Usage"  # Default
+            for desc_idx, desc_text in descriptions:
+                if date_idx < desc_idx < (vol_idx if next_volume else float('inf')):
+                    description = desc_text
+                    break
             
-            section_data = lines[section_start:section_end]
-            data_sections.append(section_data)
+            if next_volume:
+                table.append([date_text, description, next_volume])
         
-        # Verify sections have similar lengths (within 20% tolerance)
-        section_lengths = [len(s) for s in data_sections]
-        avg_length = sum(section_lengths) / len(section_lengths)
-        if not all(abs(length - avg_length) / avg_length < 0.3 for length in section_lengths):
-            # Sections too uneven, probably not column layout
-            logger.debug(f"Section lengths too uneven: {section_lengths}")
-            return None
+        if len(table) > 1:
+            logger.info(f"Parsed {len(table)-1} rows using date+volume pairing")
+            return table
         
-        # Build table rows
-        table = [headers]
-        num_rows = min(section_lengths)  # Use minimum to avoid index errors
-        
-        for row_idx in range(num_rows):
-            row = []
-            for section in data_sections:
-                if row_idx < len(section):
-                    row.append(section[row_idx])
-                else:
-                    row.append('')
-            table.append(row)
-        
-        logger.info(f"Parsed {len(table)-1} rows with {len(headers)} columns")
-        return table if len(table) > 1 else None
+        return None
     
     @staticmethod
     def _parse_row_layout(lines: List[str]) -> Optional[List[List[str]]]:
