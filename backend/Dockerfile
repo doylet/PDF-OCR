@@ -4,10 +4,17 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for PDF processing
+# Install system dependencies for PDF processing and Camelot
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     libpoppler-cpp-dev \
+    ghostscript \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (for better caching)
