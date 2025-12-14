@@ -190,6 +190,28 @@ class DocumentAIService:
                 # Upload debug artifact: cropped region image
                 if job_id:
                     try:
+                        # Convert PDF to PNG for debug visualization
+                        from pdf2image import convert_from_bytes
+                        images = convert_from_bytes(cropped_bytes, dpi=200)
+                        if images:
+                            from io import BytesIO
+                            png_buffer = BytesIO()
+                            images[0].save(png_buffer, format='PNG')
+                            png_bytes = png_buffer.getvalue()
+                            
+                            debug_url = storage_service.upload_debug_artifact(
+                                job_id,
+                                f"region_{idx}_page_{region.page}.png",
+                                png_bytes,
+                                content_type="image/png"
+                            )
+                            logger.info(f"Debug artifact uploaded for region {idx}: {debug_url}")
+                    except Exception as e:
+                        logger.warning(f"Failed to upload debug artifact: {e}")
+                
+                # Process with Document AI
+                document = self.process_document(cropped_bytes)
+                
                 # Extract text and confidence
                 text, confidence = self.extract_text_from_document(document)
                 
@@ -205,19 +227,6 @@ class DocumentAIService:
                         )
                     except Exception as e:
                         logger.warning(f"Failed to upload OCR debug artifact: {e}")
-                
-                # Extract structured data from Document AI
-                structured_data = self.extract_structured_data(document)
-                        )
-                        logger.info(f"Debug artifact uploaded for region {idx}: {debug_url}")
-                    except Exception as e:
-                        logger.warning(f"Failed to upload debug artifact: {e}")
-                
-                # Process with Document AI
-                document = self.process_document(cropped_bytes)
-                
-                # Extract text and confidence
-                text, confidence = self.extract_text_from_document(document)
                 
                 # Extract structured data from Document AI
                 structured_data = self.extract_structured_data(document)
