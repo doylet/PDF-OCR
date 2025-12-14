@@ -89,11 +89,12 @@ export default function PDFViewer({
       if (!canvas) return;
 
       // Convert canvas coordinates to PDF coordinates at 200 DPI
-      // PDF coordinates are based on the actual page dimensions
-      // Canvas displays the page at a certain scale
+      // pageDimensions from pdf.js viewport are CSS pixels (~96 DPI), not PDF points (72 DPI)
       const dpi = 200;
-      const pdfWidthInPixels = (pageDimensions.width / 72) * dpi; // PDF points to pixels at 200 DPI
-      const pdfHeightInPixels = (pageDimensions.height / 72) * dpi;
+      const cssDpi = 96;
+      
+      const pdfWidthInPixels = pageDimensions.width * (dpi / cssDpi);
+      const pdfHeightInPixels = pageDimensions.height * (dpi / cssDpi);
       
       const scaleX = pdfWidthInPixels / canvas.width;
       const scaleY = pdfHeightInPixels / canvas.height;
@@ -115,7 +116,7 @@ export default function PDFViewer({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !pageDimensions) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -123,19 +124,33 @@ export default function PDFViewer({
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Calculate scale factors for inverse transform (200 DPI PDF coords -> canvas pixels)
+    const dpi = 200;
+    const cssDpi = 96;
+    const pdfWidthInPixels = pageDimensions.width * (dpi / cssDpi);
+    const pdfHeightInPixels = pageDimensions.height * (dpi / cssDpi);
+    const scaleX = canvas.width / pdfWidthInPixels;
+    const scaleY = canvas.height / pdfHeightInPixels;
+
     // Draw existing regions for current page
     const pageRegions = regions.filter((r) => r.page === currentPage);
     pageRegions.forEach((region, index) => {
+      // Convert from 200 DPI PDF coordinates back to canvas coordinates
+      const canvasX = region.x * scaleX;
+      const canvasY = region.y * scaleY;
+      const canvasWidth = region.width * scaleX;
+      const canvasHeight = region.height * scaleY;
+      
       ctx.strokeStyle = '#3b82f6';
       ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
       ctx.lineWidth = 2;
-      ctx.fillRect(region.x, region.y, region.width, region.height);
-      ctx.strokeRect(region.x, region.y, region.width, region.height);
+      ctx.fillRect(canvasX, canvasY, canvasWidth, canvasHeight);
+      ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
 
       // Draw region number
       ctx.fillStyle = '#3b82f6';
       ctx.font = 'bold 16px Arial';
-      ctx.fillText(`#${index + 1}`, region.x + 5, region.y + 20);
+      ctx.fillText(`#${index + 1}`, canvasX + 5, canvasY + 20);
     });
 
     // Draw current drawing rectangle
@@ -146,7 +161,7 @@ export default function PDFViewer({
       ctx.fillRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
       ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
     }
-  }, [regions, currentRect, currentPage]);
+  }, [regions, currentRect, currentPage, pageDimensions]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= numPages) {

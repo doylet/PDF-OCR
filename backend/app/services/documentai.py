@@ -144,10 +144,11 @@ class DocumentAIService:
         
         return "".join(text_segments).strip()
     
-    def process_regions(self, pdf_bytes: bytes, regions: List[Region]) -> List[ExtractionResult]:
+    def process_regions(self, pdf_bytes: bytes, regions: List[Region], job_id: str = None) -> List[ExtractionResult]:
         """Process multiple regions and return extraction results"""
         from app.services.table_extractor import TableExtractionService
         from app.services.text_parser import TextParser
+        from app.services.storage import storage_service
         
         results = []
         
@@ -185,6 +186,32 @@ class DocumentAIService:
                 
                 # Crop region
                 cropped_bytes = self.crop_pdf_region(pdf_bytes, region)
+                
+                # Upload debug artifact: cropped region image
+                if job_id:
+                    try:
+                # Extract text and confidence
+                text, confidence = self.extract_text_from_document(document)
+                
+                # Upload debug artifact: raw OCR text
+                if job_id:
+                    try:
+                        ocr_debug = f"Region {idx} - Page {region.page}\nConfidence: {confidence:.4f}\n\n{text}"
+                        storage_service.upload_debug_artifact(
+                            job_id,
+                            f"region_{idx}_ocr_raw.txt",
+                            ocr_debug.encode('utf-8'),
+                            content_type="text/plain"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to upload OCR debug artifact: {e}")
+                
+                # Extract structured data from Document AI
+                structured_data = self.extract_structured_data(document)
+                        )
+                        logger.info(f"Debug artifact uploaded for region {idx}: {debug_url}")
+                    except Exception as e:
+                        logger.warning(f"Failed to upload debug artifact: {e}")
                 
                 # Process with Document AI
                 document = self.process_document(cropped_bytes)

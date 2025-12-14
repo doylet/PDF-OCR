@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request
 from app.models import ExtractionRequest, JobStatus
 from app.services.jobs import job_service
 from app.services.storage import storage_service
@@ -29,8 +29,8 @@ async def process_extraction(job_id: str, request: ExtractionRequest):
         # Download PDF
         pdf_bytes = storage_service.download_pdf(request.pdf_id)
         
-        # Process regions with Document AI
-        results = documentai_service.process_regions(pdf_bytes, request.regions)
+        # Process regions with Document AI (pass job_id for debug artifacts)
+        results = documentai_service.process_regions(pdf_bytes, request.regions, job_id=job_id)
         
         # Format results
         if request.output_format == "csv":
@@ -56,7 +56,6 @@ async def process_extraction(job_id: str, request: ExtractionRequest):
 @router.post("/", response_model=JobStatus)
 async def create_extraction_job(
     extraction_request: ExtractionRequest,
-    background_tasks: BackgroundTasks,
     request: Request,
     api_key: str = Header(None, alias="X-API-Key")
 ):
@@ -78,13 +77,20 @@ async def create_extraction_job(
         # Generate job ID
         job_id = str(uuid.uuid4())
         
-        # Create job in Firestore
-        job = job_service.create_job(job_id, extraction_request.pdf_id, len(extraction_request.regions))
+        # Create job in Firestore with request data
+        job = job_service.create_job(
+            job_id, 
+            extraction_request.pdf_id, 
+            len(extraction_request.regions),
+            request_data=extraction_request.dict()
+        )
         
-        # Add background task for processing
-        background_tasks.add_task(process_extraction, job_id, extraction_request)
+        # For MVP: Process synchronously to avoid Cloud Run CPU throttling issues
+        # TODO: Move to Cloud Tasks for production
+        await process_extraction(job_id, extraction_request)
         
-        return job
+        # Return updated job status
+        return job_service.get_job(job_id)
     
     except Exception as e:
         logger.error(f"Error creating extraction job: {e}")

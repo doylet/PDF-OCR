@@ -17,7 +17,7 @@ class JobService:
         self.db = get_firestore_client()
         self.collection = settings.firestore_collection
     
-    def create_job(self, job_id: str, pdf_id: str, regions_count: int) -> JobStatus:
+    def create_job(self, job_id: str, pdf_id: str, regions_count: int, request_data: Optional[dict] = None) -> JobStatus:
         """Create a new extraction job"""
         now = datetime.utcnow()
         job_data = {
@@ -30,6 +30,10 @@ class JobService:
             "result_url": None,
             "error_message": None
         }
+        
+        # Store request data for Cloud Tasks processing
+        if request_data:
+            job_data["request_data"] = request_data
         
         self.db.collection(self.collection).document(job_id).set(job_data)
         logger.info(f"Created job: {job_id}")

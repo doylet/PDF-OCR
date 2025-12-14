@@ -81,6 +81,24 @@ class StorageService:
         
         logger.info(f"Uploaded result for job: {job_id}")
         return result_url
+    
+    def upload_debug_artifact(self, job_id: str, artifact_name: str, content: bytes, content_type: str = "image/png") -> str:
+        """Upload debug artifact (cropped image, raw OCR text, etc.) and return URL"""
+        blob_name = f"{settings.gcs_results_folder}/{job_id}/debug/{artifact_name}"
+        
+        bucket = self.get_bucket()
+        blob = bucket.blob(blob_name)
+        blob.upload_from_string(content, content_type=content_type)
+        
+        # Generate signed URL (valid for 7 days)
+        debug_url = blob.generate_signed_url(
+            version="v4",
+            expiration=604800,
+            method="GET"
+        )
+        
+        logger.info(f"Uploaded debug artifact {artifact_name} for job: {job_id}")
+        return debug_url
 
 
 storage_service = StorageService()
