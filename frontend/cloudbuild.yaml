@@ -1,5 +1,5 @@
 steps:
-  # Build the container image (context is project root, not frontend dir)
+  # Build the container image (build context is frontend dir when submitting from frontend/)
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -12,8 +12,8 @@ steps:
       - '-t'
       - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:latest'
       - '-f'
-      - 'frontend/Dockerfile'
-      - 'frontend'
+      - 'Dockerfile'
+      - '.'
   
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
