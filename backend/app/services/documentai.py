@@ -35,18 +35,19 @@ class DocumentAIService:
                 raise ValueError(f"Could not convert page {region.page} to image")
             
             image = images[0]
+            W, H = image.size
             
-            # Crop the region with 10% padding on right/bottom to avoid clipping
-            padding_right = int(region.width * 0.10)
-            padding_bottom = int(region.height * 0.10)
+            # Region coordinates are normalized fractions (0-1), convert to pixels
+            # Add 5% padding on all sides to handle imperfect user selection
+            pad_fraction = 0.05
             
-            left = int(region.x)
-            top = int(region.y)
-            right = min(int(region.x + region.width + padding_right), image.width)
-            bottom = min(int(region.y + region.height + padding_bottom), image.height)
+            x0 = max(0, int((region.x - pad_fraction) * W))
+            y0 = max(0, int((region.y - pad_fraction) * H))
+            x1 = min(W, int((region.x + region.width + pad_fraction) * W))
+            y1 = min(H, int((region.y + region.height + pad_fraction) * H))
             
-            logger.info(f"Cropping region: ({left}, {top}, {right}, {bottom}) with {padding_right}px right, {padding_bottom}px bottom padding")
-            cropped_image = image.crop((left, top, right, bottom))
+            logger.info(f"Cropping normalized region ({region.x:.3f}, {region.y:.3f}, {region.width:.3f}, {region.height:.3f}) to pixels ({x0}, {y0}, {x1}, {y1}) with 5% padding on {W}x{H} image")
+            cropped_image = image.crop((x0, y0, x1, y1))
             
             # Convert to bytes
             img_byte_arr = io.BytesIO()

@@ -42,6 +42,8 @@ export default function PDFViewer({
   }
 
   function onPageLoadSuccess(page: { getViewport: (options: { scale: number }) => { width: number; height: number } }) {
+    // Get the base PDF page dimensions (at scale 1.0) in PDF points (72 DPI)
+    // We'll use the actual rendered canvas size for coordinate conversion
     const viewport = page.getViewport({ scale: 1.0 });
     setPageDimensions({
       width: viewport.width,
@@ -88,22 +90,13 @@ export default function PDFViewer({
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // Convert canvas coordinates to PDF coordinates at 200 DPI
-      // pageDimensions from pdf.js viewport are CSS pixels (~96 DPI), not PDF points (72 DPI)
-      const dpi = 200;
-      const cssDpi = 96;
-      
-      const pdfWidthInPixels = pageDimensions.width * (dpi / cssDpi);
-      const pdfHeightInPixels = pageDimensions.height * (dpi / cssDpi);
-      
-      const scaleX = pdfWidthInPixels / canvas.width;
-      const scaleY = pdfHeightInPixels / canvas.height;
-      
+      // Convert canvas coordinates to normalized fractions (0-1)
+      // This eliminates all DPI/scale confusion - backend will multiply by its rendered image size
       const pdfRegion: Region = {
-        x: currentRect.x * scaleX,
-        y: currentRect.y * scaleY,
-        width: currentRect.width * scaleX,
-        height: currentRect.height * scaleY,
+        x: currentRect.x / canvas.width,
+        y: currentRect.y / canvas.height,
+        width: currentRect.width / canvas.width,
+        height: currentRect.height / canvas.height,
         page: currentPage
       };
       
@@ -124,22 +117,14 @@ export default function PDFViewer({
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Calculate scale factors for inverse transform (200 DPI PDF coords -> canvas pixels)
-    const dpi = 200;
-    const cssDpi = 96;
-    const pdfWidthInPixels = pageDimensions.width * (dpi / cssDpi);
-    const pdfHeightInPixels = pageDimensions.height * (dpi / cssDpi);
-    const scaleX = canvas.width / pdfWidthInPixels;
-    const scaleY = canvas.height / pdfHeightInPixels;
-
     // Draw existing regions for current page
     const pageRegions = regions.filter((r) => r.page === currentPage);
     pageRegions.forEach((region, index) => {
-      // Convert from 200 DPI PDF coordinates back to canvas coordinates
-      const canvasX = region.x * scaleX;
-      const canvasY = region.y * scaleY;
-      const canvasWidth = region.width * scaleX;
-      const canvasHeight = region.height * scaleY;
+      // Convert from normalized fractions (0-1) to canvas pixels
+      const canvasX = region.x * canvas.width;
+      const canvasY = region.y * canvas.height;
+      const canvasWidth = region.width * canvas.width;
+      const canvasHeight = region.height * canvas.height;
       
       ctx.strokeStyle = '#3b82f6';
       ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
