@@ -147,6 +147,7 @@ class DocumentAIService:
     def process_regions(self, pdf_bytes: bytes, regions: List[Region]) -> List[ExtractionResult]:
         """Process multiple regions and return extraction results"""
         from app.services.table_extractor import TableExtractionService
+        from app.services.text_parser import TextParser
         
         results = []
         
@@ -179,8 +180,8 @@ class DocumentAIService:
                     results.append(result)
                     continue
                 
-                # Fallback: Use Document AI OCR
-                logger.info(f"Camelot found no tables, falling back to Document AI for region {idx}")
+                # Second attempt: Use Document AI OCR
+                logger.info(f"Camelot found no tables, using Document AI for region {idx}")
                 
                 # Crop region
                 cropped_bytes = self.crop_pdf_region(pdf_bytes, region)
@@ -191,8 +192,17 @@ class DocumentAIService:
                 # Extract text and confidence
                 text, confidence = self.extract_text_from_document(document)
                 
-                # Extract structured data
+                # Extract structured data from Document AI
                 structured_data = self.extract_structured_data(document)
+                
+                # Third attempt: If no structured data from Document AI, parse the OCR text
+                if not (structured_data["tables"] or structured_data["form_fields"]):
+                    parsed_table = TextParser.parse_to_table(text)
+                    if parsed_table:
+                        logger.info(f"Text parser extracted {len(parsed_table)-1} rows from region {idx}")
+                        structured_data = {"tables": [parsed_table], "form_fields": []}
+                        # Convert to text representation
+                        text = "\n".join(["\t".join(row) for row in parsed_table])
                 
                 result = ExtractionResult(
                     region_index=idx,
