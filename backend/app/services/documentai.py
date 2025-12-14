@@ -36,12 +36,16 @@ class DocumentAIService:
             
             image = images[0]
             
-            # Crop the region
+            # Crop the region with 10% padding on right/bottom to avoid clipping
+            padding_right = int(region.width * 0.10)
+            padding_bottom = int(region.height * 0.10)
+            
             left = int(region.x)
             top = int(region.y)
-            right = int(region.x + region.width)
-            bottom = int(region.y + region.height)
+            right = min(int(region.x + region.width + padding_right), image.width)
+            bottom = min(int(region.y + region.height + padding_bottom), image.height)
             
+            logger.info(f"Cropping region: ({left}, {top}, {right}, {bottom}) with {padding_right}px right, {padding_bottom}px bottom padding")
             cropped_image = image.crop((left, top, right, bottom))
             
             # Convert to bytes
@@ -184,33 +188,24 @@ class DocumentAIService:
                 # Second attempt: Use Document AI OCR
                 logger.info(f"Camelot found no tables, using Document AI for region {idx}")
                 
-                # Crop region
-                cropped_bytes = self.crop_pdf_region(pdf_bytes, region)
+                # Crop region to PNG (with padding to avoid clipping)
+                cropped_png_bytes = self.crop_pdf_region(pdf_bytes, region)
                 
                 # Upload debug artifact: cropped region image
                 if job_id:
                     try:
-                        # Convert PDF to PNG for debug visualization
-                        from pdf2image import convert_from_bytes
-                        images = convert_from_bytes(cropped_bytes, dpi=200)
-                        if images:
-                            from io import BytesIO
-                            png_buffer = BytesIO()
-                            images[0].save(png_buffer, format='PNG')
-                            png_bytes = png_buffer.getvalue()
-                            
-                            debug_url = storage_service.upload_debug_artifact(
-                                job_id,
-                                f"region_{idx}_page_{region.page}.png",
-                                png_bytes,
-                                content_type="image/png"
-                            )
-                            logger.info(f"Debug artifact uploaded for region {idx}: {debug_url}")
+                        debug_url = storage_service.upload_debug_artifact(
+                            job_id,
+                            f"region_{idx}_page_{region.page}.png",
+                            cropped_png_bytes,
+                            content_type="image/png"
+                        )
+                        logger.info(f"Debug artifact uploaded for region {idx}: {debug_url}")
                     except Exception as e:
                         logger.warning(f"Failed to upload debug artifact: {e}")
                 
-                # Process with Document AI
-                document = self.process_document(cropped_bytes)
+                # Process with Document AI using PNG (better OCR than PDF)
+                document = self.process_document(cropped_png_bytes, mime_type="image/png")
                 
                 # Extract text and confidence
                 text, confidence = self.extract_text_from_document(document)
