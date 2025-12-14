@@ -146,10 +146,42 @@ class DocumentAIService:
     
     def process_regions(self, pdf_bytes: bytes, regions: List[Region]) -> List[ExtractionResult]:
         """Process multiple regions and return extraction results"""
+        from app.services.table_extractor import TableExtractionService
+        
         results = []
         
         for idx, region in enumerate(regions):
             try:
+                # First attempt: Try Camelot for table extraction
+                camelot_tables = TableExtractionService.extract_tables_from_region(
+                    pdf_bytes,
+                    region.page,
+                    region.x,
+                    region.y,
+                    region.width,
+                    region.height
+                )
+                
+                if camelot_tables:
+                    # Successfully extracted table with Camelot
+                    logger.info(f"Camelot extracted {len(camelot_tables)} rows from region {idx}")
+                    
+                    # Convert to text representation
+                    text = "\n".join(["\t".join(row) for row in camelot_tables])
+                    
+                    result = ExtractionResult(
+                        region_index=idx,
+                        page=region.page,
+                        text=text,
+                        confidence=0.95,  # Camelot extractions are generally reliable
+                        structured_data={"tables": [camelot_tables], "form_fields": []}
+                    )
+                    results.append(result)
+                    continue
+                
+                # Fallback: Use Document AI OCR
+                logger.info(f"Camelot found no tables, falling back to Document AI for region {idx}")
+                
                 # Crop region
                 cropped_bytes = self.crop_pdf_region(pdf_bytes, region)
                 
@@ -171,7 +203,7 @@ class DocumentAIService:
                 )
                 
                 results.append(result)
-                logger.info(f"Processed region {idx} on page {region.page}")
+                logger.info(f"Processed region {idx} with Document AI")
             
             except Exception as e:
                 logger.error(f"Error processing region {idx}: {e}")
