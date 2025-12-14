@@ -14,15 +14,63 @@ class FormatterService:
     
     @staticmethod
     def parse_text_as_table(text: str) -> List[List[str]]:
-        """Try to parse text as a table by detecting common patterns"""
-        lines = text.strip().split('\n')
+        """Try to parse text as a table by detecting common patterns
+        
+        Handles both horizontal (row-based) and vertical (column-based) layouts
+        """
+        lines = [line.strip() for line in text.strip().split('\n') if line.strip()]
+        
+        if not lines:
+            return None
+        
+        # Check if this looks like vertical columns (header words on separate lines)
+        # Pattern: "Date\n06 Oct\n07 Oct\n...\nDescription\nData Usage\n...\nVolume\n671MB\n..."
+        if len(lines) > 3 and all(len(line.split()) <= 3 for line in lines[:10]):
+            # Try to identify column headers
+            potential_headers = []
+            data_start_idx = 0
+            
+            for i, line in enumerate(lines):
+                # Column header likely: single word or 2 words, capitalized, no numbers
+                if re.match(r'^[A-Z][a-z]+(\s+[A-Z][a-z]+)?$', line):
+                    potential_headers.append((i, line))
+                elif potential_headers and not re.match(r'^\d', line):
+                    # Still might be header if no digits yet
+                    potential_headers.append((i, line))
+                else:
+                    # Found first data line
+                    data_start_idx = i
+                    break
+            
+            # If we found headers, try to parse as columns
+            if len(potential_headers) >= 2:
+                header_indices = [idx for idx, _ in potential_headers]
+                headers = [name for _, name in potential_headers]
+                num_cols = len(headers)
+                
+                # Split remaining lines into columns
+                remaining_lines = lines[data_start_idx:]
+                rows_per_col = len(remaining_lines) // num_cols
+                
+                if rows_per_col > 0:
+                    table_data = [headers]  # Add header row
+                    
+                    for row_idx in range(rows_per_col):
+                        row = []
+                        for col_idx in range(num_cols):
+                            line_idx = col_idx * rows_per_col + row_idx
+                            if line_idx < len(remaining_lines):
+                                row.append(remaining_lines[line_idx])
+                            else:
+                                row.append('')
+                        table_data.append(row)
+                    
+                    return table_data if len(table_data) > 1 else None
+        
+        # Fallback: try horizontal parsing (original logic)
         table_data = []
         
         for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            
             # First try: split by multiple spaces (most reliable for OCR)
             parts = re.split(r'\s{3,}', line)
             if len(parts) >= 2:
@@ -30,7 +78,6 @@ class FormatterService:
                 continue
             
             # Second try: Look for data patterns like "DD Mon Description Value"
-            # Pattern: date (2 digits), month (3 letters), description (words), value (number + unit)
             match = re.match(r'^(\d{1,2}\s+\w+)\s+(.*?)\s+(\d+[\d.,]*(?:MB|GB|KB)?)$', line, re.IGNORECASE)
             if match:
                 table_data.append([match.group(1), match.group(2), match.group(3)])
@@ -40,23 +87,6 @@ class FormatterService:
             parts = re.split(r'\s{2,}', line)
             if len(parts) >= 2:
                 table_data.append(parts)
-                continue
-            
-            # Last resort: if line has date-like pattern at start, try to split intelligently
-            parts = line.split()
-            if len(parts) >= 3 and re.match(r'^\d{1,2}$', parts[0]):
-                # Likely: "DD Mon Description [Value]"
-                date = f"{parts[0]} {parts[1]}" if len(parts) > 1 else parts[0]
-                remaining = parts[2:]
-                if remaining:
-                    # Last part might be the value if it looks like a number
-                    if re.match(r'^\d+[\d.,]*(?:MB|GB|KB)?$', remaining[-1], re.IGNORECASE):
-                        value = remaining[-1]
-                        description = ' '.join(remaining[:-1]) if len(remaining) > 1 else ''
-                        table_data.append([date, description, value])
-                    else:
-                        description = ' '.join(remaining)
-                        table_data.append([date, description, ''])
         
         return table_data if table_data else None
     
