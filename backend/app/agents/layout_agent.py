@@ -87,57 +87,58 @@ class LayoutAgent:
     @staticmethod
     def extract_tokens_from_pdf(pdf_path: str, page_num: int) -> List[Token]:
         """
-        Extract tokens from PDF using pypdf (native text).
+        Extract tokens from PDF using pdfplumber for accurate word-level bounding boxes.
         Falls back to OCR if needed.
         """
-        from pypdf import PdfReader
+        import pdfplumber
         
         tokens = []
         
         try:
-            reader = PdfReader(pdf_path)
-            page = reader.pages[page_num]
-            
-            # Get page dimensions for bbox normalization
-            page_width = float(page.mediabox.width)
-            page_height = float(page.mediabox.height)
-            
-            # Extract text with positions using visitor pattern
-            from pypdf import PageObject
-            from pypdf._page import PageObject as PO
-            
-            def visitor_body(text, cm, tm, font_dict, font_size):
-                """Visitor function to extract text with positions"""
-                x, y = tm[4], tm[5]
-                # Normalize coordinates
-                norm_x = x / page_width if page_width > 0 else 0
-                norm_y = y / page_height if page_height > 0 else 0
+            with pdfplumber.open(pdf_path) as pdf:
+                if page_num >= len(pdf.pages):
+                    logger.error(f"Page {page_num} out of range (PDF has {len(pdf.pages)} pages)")
+                    return []
                 
-                # Estimate width based on text length and font size
-                char_width = font_size * 0.5  # Approximate
-                width = len(text) * char_width / page_width if page_width > 0 else 0.1
-                height = font_size / page_height if page_height > 0 else 0.01
+                page = pdf.pages[page_num]
+                page_width = page.width
+                page_height = page.height
                 
-                for word in text.split():
-                    if word.strip():
-                        token = Token(
-                            text=word.strip(),
-                            bbox=BBox(norm_x, norm_y, width / len(text.split()), height),
-                            page=page_num,
-                            token_type=LayoutAgent.infer_token_type(word),
-                            confidence=1.0,
-                            source=ExtractionMethod.PDF_NATIVE
-                        )
-                        tokens.append(token)
-            
-            # Extract text with visitor to get positions
-            page.extract_text(visitor_text=visitor_body)
-            
-            if len(tokens) < 10:
-                logger.info(f"Page {page_num} has little native text ({len(tokens)} tokens), OCR recommended")
-                return []
-            
-            logger.info(f"Extracted {len(tokens)} tokens from page {page_num} (PDF native)")
+                # Extract words with accurate bounding boxes
+                words = page.extract_words(use_text_flow=True, keep_blank_chars=False)
+                
+                for word in words:
+                    text = word["text"].strip()
+                    if not text:
+                        continue
+                    
+                    # pdfplumber coordinates: x0, top, x1, bottom
+                    x0 = word["x0"]
+                    x1 = word["x1"]
+                    top = word["top"]
+                    bottom = word["bottom"]
+                    
+                    # Normalize to 0..1 range
+                    norm_x = x0 / page_width if page_width > 0 else 0
+                    norm_y = top / page_height if page_height > 0 else 0
+                    norm_width = (x1 - x0) / page_width if page_width > 0 else 0.1
+                    norm_height = (bottom - top) / page_height if page_height > 0 else 0.01
+                    
+                    token = Token(
+                        text=text,
+                        bbox=BBox(norm_x, norm_y, norm_width, norm_height),
+                        page=page_num,
+                        token_type=LayoutAgent.infer_token_type(text),
+                        confidence=1.0,
+                        source=ExtractionMethod.PDF_NATIVE
+                    )
+                    tokens.append(token)
+                
+                if len(tokens) < 10:
+                    logger.info(f"Page {page_num} has little native text ({len(tokens)} tokens), OCR recommended")
+                    return []
+                
+                logger.info(f"Extracted {len(tokens)} tokens from page {page_num} using pdfplumber")
             
         except Exception as e:
             logger.error(f"Failed to extract tokens from PDF: {e}")
@@ -146,18 +147,29 @@ class LayoutAgent:
         return tokens
     
     @staticmethod
-    def cluster_tokens_into_lines(tokens: List[Token], y_tolerance: float = 0.01) -> List[List[Token]]:
+    def cluster_tokens_into_lines(tokens: List[Token], y_tolerance: Optional[float] = None) -> List[List[Token]]:
         """
-        Group tokens into lines based on vertical position.
+        Group tokens into lines based on vertical position using adaptive tolerance.
         
         Args:
             tokens: List of tokens to cluster
-            y_tolerance: Maximum y-distance to be considered same line (normalized)
+            y_tolerance: Maximum y-distance to be considered same line (normalized).
+                        If None, uses median token height * 0.5
         """
         if not tokens:
             return []
         
-        # Sort by y position, then x
+        # Calculate adaptive tolerance based on median token height if not provided
+        if y_tolerance is None:
+            token_heights = [t.bbox.h for t in tokens if t.bbox.h > 0]
+            if token_heights:
+                median_height = sorted(token_heights)[len(token_heights) // 2]
+                y_tolerance = median_height * 0.5
+                logger.info(f"Using adaptive y_tolerance: {y_tolerance:.4f} (median height: {median_height:.4f})")
+            else:
+                y_tolerance = 0.01
+        
+        # Sort by y position (top to bottom), then x (left to right)
         sorted_tokens = sorted(tokens, key=lambda t: (t.bbox.y, t.bbox.x))
         
         lines = []
@@ -165,17 +177,24 @@ class LayoutAgent:
         current_y = sorted_tokens[0].bbox.y
         
         for token in sorted_tokens[1:]:
-            if abs(token.bbox.y - current_y) <= y_tolerance:
+            # Use vertical center for more accurate line clustering
+            token_y = token.bbox.y + (token.bbox.h / 2)
+            current_center_y = current_y + (current_line[0].bbox.h / 2)
+            
+            if abs(token_y - current_center_y) <= y_tolerance:
                 current_line.append(token)
             else:
+                # Sort tokens in line by x position (left to right)
+                current_line.sort(key=lambda t: t.bbox.x)
                 lines.append(current_line)
                 current_line = [token]
                 current_y = token.bbox.y
         
         if current_line:
+            current_line.sort(key=lambda t: t.bbox.x)
             lines.append(current_line)
         
-        logger.info(f"Clustered {len(tokens)} tokens into {len(lines)} lines")
+        logger.info(f"Clustered {len(tokens)} tokens into {len(lines)} lines (tolerance: {y_tolerance:.4f})")
         return lines
     
     @staticmethod
