@@ -37,10 +37,32 @@ jobs:
 
       - name: Deploy to Cloud Run
         working-directory: ./frontend
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_API_URL }}
+          API_KEY_SECRET: ${{ secrets.API_KEY }}
         run: |
-          gcloud builds submit \
-            --config cloudbuild.yaml \
-            --substitutions _API_URL="${{ secrets.BACKEND_API_URL }}",_API_KEY="${{ secrets.API_KEY }}"
+          # Build substitutions string, only include if secrets are set
+          SUBSTITUTIONS=""
+          if [ -n "$BACKEND_URL" ]; then
+            SUBSTITUTIONS="_API_URL=$BACKEND_URL"
+          fi
+          if [ -n "$API_KEY_SECRET" ]; then
+            if [ -n "$SUBSTITUTIONS" ]; then
+              SUBSTITUTIONS="$SUBSTITUTIONS,_API_KEY=$API_KEY_SECRET"
+            else
+              SUBSTITUTIONS="_API_KEY=$API_KEY_SECRET"
+            fi
+          fi
+          
+          # Submit build with substitutions only if they exist
+          if [ -n "$SUBSTITUTIONS" ]; then
+            gcloud builds submit \
+              --config cloudbuild.yaml \
+              --substitutions "$SUBSTITUTIONS"
+          else
+            # Use default substitutions from cloudbuild.yaml
+            gcloud builds submit --config cloudbuild.yaml
+          fi
 
       - name: Get Service URL
         id: service
