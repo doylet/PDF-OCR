@@ -325,7 +325,7 @@ class LayoutAgent:
         # Get token IDs if mapping provided
         token_ids = []
         if token_id_map:
-            token_ids = [token_id_map.get(t) for t in all_tokens if t in token_id_map]
+            token_ids = [token_id_map[id(t)] for t in all_tokens if id(t) in token_id_map]
         
         region = Region(
             region_id=f"table_p{page_num}_l{start_idx}",
@@ -366,11 +366,11 @@ class LayoutAgent:
             })
             return
         
-        # Add tokens to graph and build token ID map
+        # Add tokens to graph and build token ID map (using id() as key since Token is unhashable)
         token_id_map = {}
         for token in tokens:
             token_id = graph.add_token(token)
-            token_id_map[token] = token_id
+            token_id_map[id(token)] = token_id
         
         # Step 2: Cluster into lines
         lines = LayoutAgent.cluster_tokens_into_lines(tokens)
@@ -388,7 +388,7 @@ class LayoutAgent:
                 max_y = max(t.bbox.y + t.bbox.height for t in line_tokens)
                 
                 # Get token IDs for this heading
-                heading_token_ids = [token_id_map[t] for t in line_tokens if t in token_id_map]
+                heading_token_ids = [token_id_map[id(t)] for t in line_tokens if id(t) in token_id_map]
                 
                 region = Region(
                     region_id=f"heading_p{page_num}_l{line_idx}",
