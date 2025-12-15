@@ -154,6 +154,7 @@ class DocumentAIService:
         from app.services.table_extractor import TableExtractionService
         from app.services.text_parser import TextParser
         from app.services.storage import storage_service
+        from app.services.region_analyzer import RegionAnalyzer, RegionType
         
         results = []
         
@@ -227,14 +228,26 @@ class DocumentAIService:
                 # Extract structured data from Document AI
                 structured_data = self.extract_structured_data(document)
                 
-                # Third attempt: If no structured data from Document AI, parse the OCR text
+                # Third attempt: If no structured data from Document AI, use intelligent routing
                 if not (structured_data["tables"] or structured_data["form_fields"]):
-                    parsed_table = TextParser.parse_to_table(text)
-                    if parsed_table:
-                        logger.info(f"Text parser extracted {len(parsed_table)-1} rows from region {idx}")
-                        structured_data = {"tables": [parsed_table], "form_fields": []}
-                        # Convert to text representation
-                        text = "\n".join(["\t".join(row) for row in parsed_table])
+                    # Analyze region type and get extraction hints
+                    region_type, hints = RegionAnalyzer.analyze_region(text)
+                    logger.info(f"Region {idx} detected as type: {region_type} with hints: {hints}")
+                    
+                    # Route to appropriate parser based on region type
+                    if region_type == RegionType.TABLE:
+                        parsed_table = TextParser.parse_to_table(text)
+                        if parsed_table:
+                            logger.info(f"Text parser extracted {len(parsed_table)-1} rows from region {idx}")
+                            structured_data = {"tables": [parsed_table], "form_fields": []}
+                            # Convert to text representation
+                            text = "\n".join(["\t".join(row) for row in parsed_table])
+                    elif region_type == RegionType.KEY_VALUE:
+                        # Future: implement key-value extractor
+                        logger.info(f"Region {idx} identified as key-value, but extractor not yet implemented")
+                    elif region_type == RegionType.LIST:
+                        # Future: implement list extractor
+                        logger.info(f"Region {idx} identified as list, but extractor not yet implemented")
                 
                 result = ExtractionResult(
                     region_index=idx,

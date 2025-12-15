@@ -10,25 +10,30 @@ class TextParser:
     @staticmethod
     def parse_to_table(text: str) -> Optional[List[List[str]]]:
         """
-        Parse newline-separated OCR text into table rows.
+        Parse newline-separated OCR text into table rows using multiple strategies.
         
-        Handles common layouts like:
-        - Column headers on separate lines followed by data
-        - Values reading top-to-bottom, left-to-right
+        Tries strategies in order of specificity:
+        1. Date+Volume pairing (telecom bills, usage tables)
+        2. Row-based with delimiters (TSV-like)
+        3. Generic column layout detection
         """
         lines = [line.strip() for line in text.strip().split('\n') if line.strip()]
         
         if len(lines) < 4:
             return None
         
-        # Strategy 1: Detect column-based layout with headers
-        # Pattern: "Header1\nvalue1\nvalue2\n...\nHeader2\nvalue1\nvalue2..."
+        # Strategy 1: Date+Volume pairing (most specific, highest confidence)
         result = TextParser._parse_column_layout(lines)
         if result:
             return result
         
-        # Strategy 2: Row-based with tab/multi-space separation
+        # Strategy 2: Row-based with tab/multi-space separation (structured format)
         result = TextParser._parse_row_layout(lines)
+        if result:
+            return result
+        
+        # Strategy 3: Generic column detection (fallback)
+        result = TextParser._parse_generic_columns(lines)
         if result:
             return result
         
@@ -111,3 +116,60 @@ class TextParser:
                 table.append([p.strip() for p in parts])
         
         return table if len(table) > 1 else None
+    
+    @staticmethod
+    def _parse_generic_columns(lines: List[str]) -> Optional[List[List[str]]]:
+        """
+        Generic column detection fallback.
+        
+        Looks for repeated patterns suggesting columnar structure:
+        - Header keywords in first few lines
+        - Consistent column count across rows
+        """
+        import re
+        
+        # Look for header candidates (common table words)
+        header_keywords = ['date', 'time', 'amount', 'total', 'description', 
+                          'name', 'number', 'id', 'status', 'type', 'quantity', 'price']
+        
+        potential_headers = []
+        data_start_idx = 0
+        
+        for idx, line in enumerate(lines[:5]):  # Check first 5 lines for headers
+            line_lower = line.lower()
+            if any(keyword in line_lower for keyword in header_keywords):
+                potential_headers.append(line)
+                data_start_idx = idx + 1
+        
+        if not potential_headers or data_start_idx >= len(lines):
+            return None
+        
+        # Try to detect column count from headers
+        header_line = ' '.join(potential_headers)
+        possible_columns = re.split(r'[,\t|]|\s{2,}', header_line)
+        possible_columns = [col.strip() for col in possible_columns if col.strip()]
+        
+        if len(possible_columns) < 2:
+            return None
+        
+        # Parse remaining lines into that many columns
+        rows = [possible_columns]  # Start with headers
+        
+        for line in lines[data_start_idx:]:
+            cells = re.split(r'[,\t|]|\s{2,}', line)
+            cells = [cell.strip() for cell in cells if cell.strip()]
+            
+            if len(cells) == len(possible_columns):
+                rows.append(cells)
+            elif len(cells) > 0:
+                # Pad or truncate to match column count
+                while len(cells) < len(possible_columns):
+                    cells.append('')
+                rows.append(cells[:len(possible_columns)])
+        
+        # Only return if we got some data rows
+        if len(rows) > 1:
+            logger.info(f"Generic column parser extracted {len(rows)-1} rows with {len(possible_columns)} columns")
+            return rows
+        
+        return None
