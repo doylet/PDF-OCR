@@ -213,19 +213,20 @@ class LayoutAgent:
             # Check for heading patterns
             is_heading = False
             
-            # 1. Contains heading keywords
-            if any(keyword in line_text for keyword in LayoutAgent.HEADING_KEYWORDS):
+            # Only mark as heading if it contains heading keywords AND isn't table-like
+            has_heading_keyword = any(keyword in line_text for keyword in LayoutAgent.HEADING_KEYWORDS)
+            has_numbers = any(t.token_type in [TokenType.NUMBER, TokenType.CURRENCY, 
+                                               TokenType.DATA_VOLUME, TokenType.DATE] 
+                             for t in line_tokens)
+            
+            # 1. Contains heading keywords but not numbers (excludes table rows)
+            if has_heading_keyword and not has_numbers:
                 is_heading = True
             
-            # 2. All caps (excluding short words)
-            if len(line_text) > 10:
+            # 2. All caps (excluding short words) - only if no numbers
+            if len(line_text) > 10 and not has_numbers:
                 caps_ratio = sum(1 for c in line_text if c.isupper()) / len(line_text)
                 if caps_ratio > 0.7:
-                    is_heading = True
-            
-            # 3. Short line with few tokens (likely a heading)
-            if len(line_tokens) <= 5 and len(line_text) < 50:
-                if any(keyword in line_text for keyword in LayoutAgent.HEADING_KEYWORDS):
                     is_heading = True
             
             if is_heading:

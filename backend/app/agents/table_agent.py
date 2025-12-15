@@ -48,21 +48,23 @@ class TableAgent:
         tokens = graph.get_tokens_in_region(region.region_id)
         
         if not tokens:
-            logger.warning(f"No tokens in region {region.region_id}")
+            logger.warning(f"No tokens in region {region.region_id} (token_ids={region.token_ids[:5] if region.token_ids else []})")
             return None
+        
+        logger.info(f"Found {len(tokens)} tokens in {region.region_id}")
         
         # Step 1: Cluster tokens into columns (vertical alignment)
         columns = TableAgent._cluster_columns(tokens)
         
         if len(columns) < 2:
-            logger.warning(f"Found only {len(columns)} columns, need at least 2")
+            logger.warning(f"Found only {len(columns)} columns, need at least 2 (tokens={len(tokens)})")
             return None
         
         # Step 2: Group tokens into rows (horizontal alignment)
         rows = TableAgent._group_rows(tokens, columns)
         
         if len(rows) < 2:  # Need header + at least 1 data row
-            logger.warning(f"Found only {len(rows)} rows, need at least 2")
+            logger.warning(f"Found only {len(rows)} rows, need at least 2 (columns={len(columns)}, tokens={len(tokens)})")
             return None
         
         # Step 3: Build table grid

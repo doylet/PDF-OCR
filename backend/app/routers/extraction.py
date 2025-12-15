@@ -170,12 +170,24 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
                 
                 # Convert to ExtractionResult for formatter compatibility
                 from app.models.api import ExtractionResult
+                
+                # Handle table data structure
+                if "rows" in extraction.data:
+                    # Table extraction
+                    num_rows = extraction.data.get("num_rows", len(extraction.data.get("rows", [])))
+                    text = f"Table with {num_rows} rows"
+                    structured_data = {"tables": [extraction.data.get("rows", [])]}
+                else:
+                    # Other extraction types
+                    text = extraction.data.get("text", "")
+                    structured_data = extraction.data if extraction.data else None
+                
                 result = ExtractionResult(
                     region_index=idx,
                     page=page,
-                    text=extraction.data.get("text", str(extraction.data)),
+                    text=text,
                     confidence=extraction.confidence,
-                    structured_data=extraction.data if extraction.data else None
+                    structured_data=structured_data
                 )
                 results.append(result)
         
