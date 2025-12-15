@@ -172,7 +172,7 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
                 })
         
         # Log outcome
-        outcome = graph.outcome.value if graph.outcome else "unknown"
+        outcome = graph.outcome if graph.outcome else "unknown"
         logger.info(f"Job {job_id} outcome: {outcome}, regions={len(graph.regions)}, extractions={len(results)}")
         
         # Add metadata to results

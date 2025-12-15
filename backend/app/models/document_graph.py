@@ -67,8 +67,16 @@ class BBox:
     """Bounding box in normalized coordinates (0-1)"""
     x: float  # left
     y: float  # top
-    width: float
-    height: float
+    w: float  # width (alias for width)
+    h: float  # height (alias for height)
+    
+    @property
+    def width(self) -> float:
+        return self.w
+    
+    @property
+    def height(self) -> float:
+        return self.h
     
     def contains(self, other: 'BBox') -> bool:
         """Check if this bbox contains another"""
