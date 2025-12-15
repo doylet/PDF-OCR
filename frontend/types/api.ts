@@ -13,20 +13,23 @@ export interface ExtractionRequest {
   output_format: 'csv' | 'tsv' | 'json';
 }
 
-export interface JobStatus {
-  job_id: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
-  created_at: string;
-  updated_at: string;
-  pdf_id: string;
-  regions_count: number;
-  result_url?: string;
-  error_message?: string;
-  debug_graph_url?: string;
-}
-
 export interface UploadResponse {
   pdf_id: string;
   upload_url: string;
   file_name: string;
+}
+
+export interface JobStatus {
+  job_id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  created_at: string;
+  updated_at: string;
+  pdf_id: string;
+  regions_count: number;
+  error_message?: string;
+  debug_graph_url?: string;
+  result_url?: string;
+  progress?: number;
+  detected_entities?: number;  // Add this
+  processing_step?: string;     // Add this
 }

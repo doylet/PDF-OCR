@@ -4,10 +4,30 @@ import { JobStatus } from '@/types/api';
 import { CheckCircle, Clock, AlertCircle, Loader2, FileText, ExternalLink } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
+interface DetectedRegion {
+  region_id: string;
+  region_type: string;
+  bbox: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+  page: number;
+  confidence: number;
+}
+
+interface TraceEvent {
+  step: string;
+  status: string;
+  region_id?: string;
+  [key: string]: unknown;
+}
+
 interface JobStatusDisplayProps {
   job: JobStatus | null;
   onDownload: () => void;
-  onRegionsDetected?: (regions: any[]) => void;
+  onRegionsDetected?: (regions: DetectedRegion[]) => void;
 }
 
 interface DebugGraph {
@@ -16,9 +36,9 @@ interface DebugGraph {
     pages: number;
     regions_proposed: number;
     regions_extracted: number;
-    trace: any[];
+    trace: TraceEvent[];
   };
-  regions?: any[];
+  regions?: DetectedRegion[];
 }
 
 export default function JobStatusDisplay({ job, onDownload, onRegionsDetected }: JobStatusDisplayProps) {
@@ -43,7 +63,7 @@ export default function JobStatusDisplay({ job, onDownload, onRegionsDetected }:
 
   const getStatusIcon = () => {
     switch (job.status) {
-      case 'queued':
+      case 'pending':
         return <Clock className="text-yellow-500" size={24} />;
       case 'processing':
         return <Loader2 className="text-blue-500 animate-spin" size={24} />;
@@ -56,7 +76,7 @@ export default function JobStatusDisplay({ job, onDownload, onRegionsDetected }:
 
   const getStatusText = () => {
     switch (job.status) {
-      case 'queued':
+      case 'pending':
         return 'Job queued for processing...';
       case 'processing':
         return 'Processing regions...';
@@ -69,7 +89,7 @@ export default function JobStatusDisplay({ job, onDownload, onRegionsDetected }:
 
   const getStatusColor = () => {
     switch (job.status) {
-      case 'queued':
+      case 'pending':
         return 'bg-yellow-50 border-yellow-200';
       case 'processing':
         return 'bg-blue-50 border-blue-200';
@@ -154,7 +174,7 @@ export default function JobStatusDisplay({ job, onDownload, onRegionsDetected }:
                 <div>
                   <h4 className="font-semibold mb-2">Execution Trace:</h4>
                   <div className="space-y-1 max-h-60 overflow-y-auto bg-gray-50 p-2 rounded">
-                    {debugGraph.summary.trace.map((event: any, idx: number) => (
+                    {debugGraph.summary.trace.map((event, idx: number) => (
                       <div key={idx} className="flex items-center space-x-2 text-xs">
                         <span className={`px-2 py-0.5 rounded ${
                           event.status === 'success' ? 'bg-green-100 text-green-800' :
