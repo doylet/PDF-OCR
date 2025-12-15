@@ -201,22 +201,17 @@ class ExpertOrchestrator:
     def _extract_table(self, region: Region) -> None:
         """
         Extract structured table from region.
-        Calls Table Agent (to be implemented).
+        Calls Table Agent.
         """
-        logger.info(f"Table extraction for {region.region_id} - placeholder")
+        from app.agents.table_agent import TableAgent
         
-        # Placeholder: create empty extraction
-        extraction = Extraction(
-            extraction_id=f"ext_{region.region_id}",
-            region_id=region.region_id,
-            data={"rows": [], "columns": []},
-            schema=None,
-            confidence=0.0,
-            validation_status=ValidationStatus.PENDING,
-            extracted_by="table_agent_placeholder",
-            method=ExtractionMethod.AGENT_INFERRED
-        )
-        self.graph.add_extraction(extraction)
+        logger.info(f"Table extraction for {region.region_id}")
+        
+        extraction = TableAgent.extract_table(self.graph, region)
+        if extraction:
+            self.graph.add_extraction(extraction)
+        else:
+            logger.warning(f"TableAgent returned no extraction for {region.region_id}")
     
     def _extract_key_value(self, region: Region) -> None:
         """Extract key-value pairs (invoice details, etc.)"""
