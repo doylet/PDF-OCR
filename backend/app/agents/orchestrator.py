@@ -170,6 +170,11 @@ class ExpertOrchestrator:
         
         for region in page_regions:
             self._dispatch_to_specialist(region)
+        
+        # Fallback: If no table regions detected, try Camelot on full page
+        table_regions = [r for r in page_regions if r.region_type == RegionType.TABLE]
+        if not table_regions:
+            self._extract_tables_with_camelot(page_num)
     
     def _dispatch_to_specialist(self, region: Region) -> None:
         """
@@ -254,6 +259,57 @@ class ExpertOrchestrator:
             extracted_by="totals_agent_placeholder"
         )
         self.graph.add_extraction(extraction)
+    
+    def _extract_tables_with_camelot(self, page_num: int) -> None:
+        """
+        Fallback: Use Camelot to extract tables from full page.
+        Called when LayoutAgent doesn't detect any table regions.
+        """
+        import camelot
+        
+        logger.info(f"Using Camelot fallback for page {page_num}")
+        
+        try:
+            # Camelot uses 1-indexed pages
+            tables = camelot.read_pdf(
+                self.pdf_path,
+                pages=str(page_num + 1),
+                flavor='lattice',
+                strip_text='\n'
+            )
+            
+            if not tables:
+                logger.info(f"Camelot found no tables on page {page_num}")
+                return
+            
+            # Process each table found
+            for table_idx, table in enumerate(tables):
+                # Convert to list of rows
+                rows = []
+                for row in table.df.values.tolist():
+                    # Filter empty cells
+                    cleaned_row = [str(cell).strip() for cell in row if str(cell).strip()]
+                    if cleaned_row:
+                        rows.append(cleaned_row)
+                
+                if len(rows) < 2:
+                    continue
+                
+                # Create extraction
+                extraction = Extraction(
+                    extraction_id=f"camelot_p{page_num}_t{table_idx}",
+                    region_id=f"camelot_region_p{page_num}_t{table_idx}",
+                    data={"rows": rows, "columns": len(rows[0]) if rows else 0},
+                    confidence=0.85,
+                    validation_status=ValidationStatus.PENDING,
+                    extracted_by="camelot_fallback",
+                    method=ExtractionMethod.AGENT_INFERRED
+                )
+                self.graph.add_extraction(extraction)
+                logger.info(f"Camelot extracted {len(rows)} rows from page {page_num} table {table_idx}")
+        
+        except Exception as e:
+            logger.error(f"Camelot fallback failed for page {page_num}: {e}")
     
     def _validate_extractions(self) -> None:
         """
