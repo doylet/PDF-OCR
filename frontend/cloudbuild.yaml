@@ -42,6 +42,8 @@ images:
   - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:${BUILD_ID}'
   - 'gcr.io/${PROJECT_ID}/pdf-ocr-frontend:latest'
 
+# Default substitutions - these are used if not overridden via --substitutions
+# These MUST be set to your production backend URL and API key
 substitutions:
   _API_URL: 'https://pdf-ocr-api-e3b7ctuuxa-uc.a.run.app'
   _API_KEY: 'M3CIlxn7kDnBSRy5OeDn1m36EkF1YTD9iaQqZiB02ys='
