@@ -20,7 +20,7 @@ export default function Home() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [outputFormat, setOutputFormat] = useState<'csv' | 'tsv' | 'json'>('csv');
-  const [extractionMethod, setExtractionMethod] = useState<'classic' | 'agentic'>('classic');
+  const [extractionMethod, setExtractionMethod] = useState<'classic' | 'agentic'>('agentic');
   const [job, setJob] = useState<JobStatus | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
