@@ -37,17 +37,20 @@ jobs:
 
       - name: Deploy to Cloud Run
         working-directory: ./frontend
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_API_URL }}
+          API_KEY_SECRET: ${{ secrets.API_KEY }}
         run: |
           # Build substitutions string, only include if secrets are set
           SUBSTITUTIONS=""
-          if [ -n "${{ secrets.BACKEND_API_URL }}" ]; then
-            SUBSTITUTIONS="_API_URL=${{ secrets.BACKEND_API_URL }}"
+          if [ -n "$BACKEND_URL" ]; then
+            SUBSTITUTIONS="_API_URL=$BACKEND_URL"
           fi
-          if [ -n "${{ secrets.API_KEY }}" ]; then
+          if [ -n "$API_KEY_SECRET" ]; then
             if [ -n "$SUBSTITUTIONS" ]; then
-              SUBSTITUTIONS="$SUBSTITUTIONS,_API_KEY=${{ secrets.API_KEY }}"
+              SUBSTITUTIONS="$SUBSTITUTIONS,_API_KEY=$API_KEY_SECRET"
             else
-              SUBSTITUTIONS="_API_KEY=${{ secrets.API_KEY }}"
+              SUBSTITUTIONS="_API_KEY=$API_KEY_SECRET"
             fi
           fi
           
