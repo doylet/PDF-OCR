@@ -218,7 +218,7 @@ export default function Home() {
                     <label className="block text-sm font-medium mb-1">Extraction Method</label>
                     <select
                       value={extractionMethod}
-                      onChange={(e) => setExtractionMethod(e.target.value as any)}
+                      onChange={(e) => setExtractionMethod(e.target.value as 'classic' | 'agentic')}
                       className="w-full px-3 py-2 border border-gray-300 rounded"
                     >
                       <option value="classic">Classic (Manual Regions)</option>
@@ -235,7 +235,7 @@ export default function Home() {
                     <label className="block text-sm font-medium mb-1">Output Format</label>
                     <select
                       value={outputFormat}
-                      onChange={(e) => setOutputFormat(e.target.value as any)}
+                      onChange={(e) => setOutputFormat(e.target.value as 'csv' | 'tsv' | 'json')}
                       className="w-full px-3 py-2 border border-gray-300 rounded"
                     >
                       <option value="csv">CSV</option>

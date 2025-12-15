@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 try:
-    from app.agents.orchestrator import ExpectOrchestrator
+    from app.agents.orchestrator import ExpertOrchestrator
     from app.models.document_graph import DocumentGraph
     AGENTIC_AVAILABLE = True
 except ImportError:
@@ -158,7 +158,7 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
             tmp.write(pdf_bytes)
             pdf_path = tmp.name
         
-        orchestrator = ExpectOrchestrator(pdf_path, job_id)
+        orchestrator = ExpertOrchestrator(pdf_path, job_id)
         graph = orchestrator.run()
         
         results = []

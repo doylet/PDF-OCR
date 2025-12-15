@@ -1,5 +1,5 @@
 """
-Expect Orchestrator: The main agentic loop.
+Expert Orchestrator: The main agentic loop.
 
 Responsibilities:
 1. Ingest PDF → decide per page: PDF native text vs OCR
@@ -24,7 +24,7 @@ from app.agents.layout_agent import LayoutAgent
 logger = logging.getLogger(__name__)
 
 
-class ExpectOrchestrator:
+class ExpertOrchestrator:
     """
     Main orchestrator for the agentic extraction pipeline.
     Keeps agents on a tight leash - they decide and validate, not "magically extract".
@@ -48,7 +48,7 @@ class ExpectOrchestrator:
             pdf_path=pdf_path
         )
         
-        logger.info(f"ExpectOrchestrator initialized for job {job_id}")
+        logger.info(f"ExpertOrchestrator initialized for job {job_id}")
     
     def run(self) -> DocumentGraph:
         """
