@@ -26,7 +26,6 @@ class GCPClients:
     def get_credentials(cls) -> Optional[service_account.Credentials]:
         """Get service account credentials from mounted secret if available"""
         if cls._credentials is None:
-            # Check if service account key is mounted as a secret
             key_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '/secrets/service-account-key.json')
             if os.path.exists(key_path):
                 try:
