@@ -102,30 +102,40 @@ class LayoutAgent:
             page_width = float(page.mediabox.width)
             page_height = float(page.mediabox.height)
             
-            # Extract text with positions
-            # Note: This is simplified - real implementation would use
-            # page.extract_text() with visitor pattern for exact positions
-            text = page.extract_text()
+            # Extract text with positions using visitor pattern
+            from pypdf import PageObject
+            from pypdf._page import PageObject as PO
             
-            if not text or len(text.strip()) < 20:
-                logger.info(f"Page {page_num} has little native text, OCR recommended")
-                return []
-            
-            # Split into words and create tokens
-            # In production, use proper PDF text extraction with positions
-            for word in text.split():
-                if not word.strip():
-                    continue
+            def visitor_body(text, cm, tm, font_dict, font_size):
+                """Visitor function to extract text with positions"""
+                x, y = tm[4], tm[5]
+                # Normalize coordinates
+                norm_x = x / page_width if page_width > 0 else 0
+                norm_y = y / page_height if page_height > 0 else 0
                 
-                token = Token(
-                    text=word.strip(),
-                    bbox=BBox(0, 0, 0.1, 0.1),  # Placeholder - need real extraction
-                    page=page_num,
-                    token_type=LayoutAgent.infer_token_type(word),
-                    confidence=1.0,
-                    source=ExtractionMethod.PDF_NATIVE
-                )
-                tokens.append(token)
+                # Estimate width based on text length and font size
+                char_width = font_size * 0.5  # Approximate
+                width = len(text) * char_width / page_width if page_width > 0 else 0.1
+                height = font_size / page_height if page_height > 0 else 0.01
+                
+                for word in text.split():
+                    if word.strip():
+                        token = Token(
+                            text=word.strip(),
+                            bbox=BBox(norm_x, norm_y, width / len(text.split()), height),
+                            page=page_num,
+                            token_type=LayoutAgent.infer_token_type(word),
+                            confidence=1.0,
+                            source=ExtractionMethod.PDF_NATIVE
+                        )
+                        tokens.append(token)
+            
+            # Extract text with visitor to get positions
+            page.extract_text(visitor_text=visitor_body)
+            
+            if len(tokens) < 10:
+                logger.info(f"Page {page_num} has little native text ({len(tokens)} tokens), OCR recommended")
+                return []
             
             logger.info(f"Extracted {len(tokens)} tokens from page {page_num} (PDF native)")
             
