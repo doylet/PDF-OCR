@@ -70,7 +70,18 @@ class StorageService:
         
         bucket = self.get_bucket()
         blob = bucket.blob(blob_name)
-        blob.upload_from_string(content, content_type=f"text/{format}")
+        
+        # Set appropriate content type
+        if format == "json":
+            content_type = "application/json"
+        elif format == "csv":
+            content_type = "text/csv"
+        elif format == "tsv":
+            content_type = "text/tab-separated-values"
+        else:
+            content_type = f"text/{format}"
+        
+        blob.upload_from_string(content, content_type=content_type)
         
         # Generate signed URL (valid for 7 days)
         result_url = blob.generate_signed_url(

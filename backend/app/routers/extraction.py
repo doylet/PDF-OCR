@@ -197,10 +197,12 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
         
         result_url = storage_service.upload_result(job_id, formatted_content, request.output_format)
         
-        # Store full graph with metadata
+        # Store full graph with metadata as proper JSON
+        import json
         graph_dict = graph.to_dict()
         graph_dict["summary"] = summary
-        storage_service.upload_result(job_id, str(graph_dict), "json", suffix="_graph")
+        graph_json = json.dumps(graph_dict, indent=2, default=str)
+        debug_graph_url = storage_service.upload_result(job_id, graph_json, "json", suffix="_graph")
         
         # Status message based on outcome
         if outcome == "no_match":
@@ -214,7 +216,8 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
             job_id, 
             "completed", 
             result_url=result_url,
-            error_message=status_msg if outcome == "no_match" else None
+            error_message=status_msg if outcome == "no_match" else None,
+            debug_graph_url=debug_graph_url
         )
         
         logger.info(f"Completed agentic extraction job: {job_id}, outcome: {outcome}")

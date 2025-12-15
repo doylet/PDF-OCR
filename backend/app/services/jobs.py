@@ -28,7 +28,8 @@ class JobService:
             "pdf_id": pdf_id,
             "regions_count": regions_count,
             "result_url": None,
-            "error_message": None
+            "error_message": None,
+            "debug_graph_url": None
         }
         
         # Store request data for Cloud Tasks processing
@@ -49,7 +50,7 @@ class JobService:
         
         return JobStatus(**doc.to_dict())
     
-    def update_job_status(self, job_id: str, status: str, result_url: Optional[str] = None, error_message: Optional[str] = None):
+    def update_job_status(self, job_id: str, status: str, result_url: Optional[str] = None, error_message: Optional[str] = None, debug_graph_url: Optional[str] = None):
         """Update job status"""
         update_data = {
             "status": status,
@@ -61,6 +62,9 @@ class JobService:
         
         if error_message:
             update_data["error_message"] = error_message
+        
+        if debug_graph_url:
+            update_data["debug_graph_url"] = debug_graph_url
         
         self.db.collection(self.collection).document(job_id).update(update_data)
         logger.info(f"Updated job {job_id} to status: {status}")

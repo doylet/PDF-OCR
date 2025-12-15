@@ -30,6 +30,7 @@ class JobStatus(BaseModel):
     regions_count: int
     result_url: Optional[str] = None
     error_message: Optional[str] = None
+    debug_graph_url: Optional[str] = None
 
 
 class ExtractionResult(BaseModel):

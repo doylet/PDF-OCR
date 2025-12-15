@@ -377,7 +377,7 @@ class ExpertOrchestrator:
     
     def _validate_extractions(self) -> None:
         """
-        Run validators on all extractions.
+        Run validators on all extractions using ValidatorAgent.
         
         Checks:
         - Totals match sums
@@ -385,21 +385,30 @@ class ExpertOrchestrator:
         - Types parse cleanly
         - "Total ..." lines not mistaken as data rows
         """
+        from app.agents.validator_agent import ValidatorAgent
+        
         logger.info("Validating all extractions")
         
         for extraction in self.graph.extractions:
-            # Placeholder validation
-            extraction.validation_status = ValidationStatus.PASS
-            extraction.confidence = 0.8
+            decision = ValidatorAgent.validate_extraction(self.graph, extraction)
             
-            logger.info(f"Validated {extraction.extraction_id}: {extraction.validation_status}")
+            self.graph.decisions.append({
+                "agent": "validator",
+                "extraction_id": extraction.extraction_id,
+                "decision": decision.action.value,
+                "confidence": decision.confidence,
+                "explanation": decision.explanation,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            logger.info(f"Validated {extraction.extraction_id}: {extraction.validation_status} (conf={extraction.confidence:.2f})")
     
     def _handle_retries(self) -> None:
         """
         Handle failed validations with controlled retry strategies.
         
         Retry strategies:
-        - RETRY_PAD: expand crop margins
+        - RETRY_PAD: expand crop margins and re-extract
         - RETRY_OCR: force OCR instead of PDF text
         - RETRY_HIGHER_DPI: increase OCR resolution
         """
@@ -421,7 +430,7 @@ class ExpertOrchestrator:
             # Decide retry strategy
             decision = self._decide_retry_strategy(extraction)
             
-            logger.info(f"Retry decision for {extraction.extraction_id}: {decision}")
+            logger.info(f"Retry decision for {extraction.extraction_id}: {decision.action.value}")
             
             self.graph.decisions.append({
                 "agent": "orchestrator",
@@ -431,6 +440,59 @@ class ExpertOrchestrator:
                 "explanation": decision.explanation,
                 "timestamp": datetime.now().isoformat()
             })
+            
+            # Actually execute the retry
+            if decision.action == AgentDecision.Action.RETRY_PAD:
+                self._retry_with_padding(extraction, decision.next_params)
+            elif decision.action == AgentDecision.Action.RETRY_OCR:
+                self._retry_with_ocr(extraction, decision.next_params)
+            elif decision.action == AgentDecision.Action.RETRY_HIGHER_DPI:
+                self._retry_with_higher_dpi(extraction, decision.next_params)
+    
+    def _retry_with_padding(self, extraction: Extraction, params: Dict) -> None:
+        """Re-extract region with expanded bounding box."""
+        region = next((r for r in self.graph.regions if r.region_id == extraction.region_id), None)
+        if not region:
+            logger.error(f"Region {extraction.region_id} not found for retry")
+            return
+        
+        pad_fraction = params.get("pad_fraction", 0.1)
+        logger.info(f"Retrying {region.region_id} with {pad_fraction:.2%} padding")
+        
+        # Create padded region
+        padded_bbox = BBox(
+            x=max(0, region.bbox.x - pad_fraction),
+            y=max(0, region.bbox.y - pad_fraction),
+            w=min(1.0, region.bbox.w + 2 * pad_fraction),
+            h=min(1.0, region.bbox.h + 2 * pad_fraction)
+        )
+        
+        padded_region = Region(
+            region_id=f"{region.region_id}_retry",
+            region_type=region.region_type,
+            bbox=padded_bbox,
+            page=region.page,
+            confidence=region.confidence,
+            source_agent="orchestrator_retry"
+        )
+        
+        # Mark original as superseded
+        extraction.validation_status = ValidationStatus.WARNING
+        extraction.validation_errors.append("Superseded by padded retry")
+        
+        # Re-dispatch to specialist
+        self.graph.add_region(padded_region)
+        self._dispatch_to_specialist(padded_region)
+    
+    def _retry_with_ocr(self, extraction: Extraction, params: Dict) -> None:
+        """Re-extract region using OCR instead of native text."""
+        logger.info(f"OCR retry not yet implemented for {extraction.extraction_id}")
+        # TODO: Force OCR path
+    
+    def _retry_with_higher_dpi(self, extraction: Extraction, params: Dict) -> None:
+        """Re-extract region at higher DPI."""
+        logger.info(f"Higher DPI retry not yet implemented for {extraction.extraction_id}")
+        # TODO: Increase DPI and re-extract
     
     def _decide_retry_strategy(self, extraction: Extraction) -> AgentDecision:
         """
