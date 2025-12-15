@@ -25,6 +25,7 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detectedRegions, setDetectedRegions] = useState<any[]>([]);
 
   // Poll job status
   useEffect(() => {
@@ -196,6 +197,7 @@ export default function Home() {
                 onRegionRemove={handleRegionRemove}
                 currentPage={currentPage}
                 onPageChange={setCurrentPage}
+                detectedRegions={detectedRegions}
               />
             </div>
 
@@ -257,7 +259,11 @@ export default function Home() {
               {/* Job Status */}
               {job && (
                 <div className="bg-white rounded-lg shadow-lg p-6">
-                  <JobStatusDisplay job={job} onDownload={handleDownload} />
+                  <JobStatusDisplay 
+                    job={job} 
+                    onDownload={handleDownload}
+                    onRegionsDetected={setDetectedRegions}
+                  />
                 </div>
               )}
             </div>

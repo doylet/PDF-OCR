@@ -1,14 +1,44 @@
 'use client';
 
 import { JobStatus } from '@/types/api';
-import { CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Loader2, FileText, ExternalLink } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 interface JobStatusDisplayProps {
   job: JobStatus | null;
   onDownload: () => void;
+  onRegionsDetected?: (regions: any[]) => void;
 }
 
-export default function JobStatusDisplay({ job, onDownload }: JobStatusDisplayProps) {
+interface DebugGraph {
+  summary?: {
+    outcome: string;
+    pages: number;
+    regions_proposed: number;
+    regions_extracted: number;
+    trace: any[];
+  };
+  regions?: any[];
+}
+
+export default function JobStatusDisplay({ job, onDownload, onRegionsDetected }: JobStatusDisplayProps) {
+  const [debugGraph, setDebugGraph] = useState<DebugGraph | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  
+  useEffect(() => {
+    if (job?.debug_graph_url && job.status === 'completed') {
+      fetch(job.debug_graph_url)
+        .then(res => res.json())
+        .then(data => {
+          setDebugGraph(data);
+          if (onRegionsDetected && data.regions) {
+            onRegionsDetected(data.regions);
+          }
+        })
+        .catch(err => console.error('Failed to load debug graph:', err));
+    }
+  }, [job?.debug_graph_url, job?.status, onRegionsDetected]);
+  
   if (!job) return null;
 
   const getStatusIcon = () => {
@@ -82,6 +112,76 @@ export default function JobStatusDisplay({ job, onDownload }: JobStatusDisplayPr
           <p className="text-sm text-red-800">
             <strong>Error:</strong> {job.error_message}
           </p>
+        </div>
+      )}
+      
+      {debugGraph && (
+        <div className="mt-4 border-t pt-4">
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className="flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-800 mb-2"
+          >
+            <FileText size={16} />
+            <span>{showDebug ? 'Hide' : 'Show'} Agentic Debug Info</span>
+          </button>
+          
+          {showDebug && debugGraph.summary && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded">
+                <div>
+                  <span className="font-semibold">Outcome:</span>
+                  <span className={`ml-2 px-2 py-1 rounded text-xs ${
+                    debugGraph.summary.outcome === 'success' ? 'bg-green-200 text-green-800' :
+                    debugGraph.summary.outcome === 'partial_success' ? 'bg-yellow-200 text-yellow-800' :
+                    debugGraph.summary.outcome === 'no_match' ? 'bg-orange-200 text-orange-800' :
+                    'bg-red-200 text-red-800'
+                  }`}>
+                    {debugGraph.summary.outcome}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold">Pages:</span> {debugGraph.summary.pages}
+                </div>
+                <div>
+                  <span className="font-semibold">Regions Proposed:</span> {debugGraph.summary.regions_proposed}
+                </div>
+                <div>
+                  <span className="font-semibold">Regions Extracted:</span> {debugGraph.summary.regions_extracted}
+                </div>
+              </div>
+              
+              {debugGraph.summary.trace && debugGraph.summary.trace.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Execution Trace:</h4>
+                  <div className="space-y-1 max-h-60 overflow-y-auto bg-gray-50 p-2 rounded">
+                    {debugGraph.summary.trace.map((event: any, idx: number) => (
+                      <div key={idx} className="flex items-center space-x-2 text-xs">
+                        <span className={`px-2 py-0.5 rounded ${
+                          event.status === 'success' ? 'bg-green-100 text-green-800' :
+                          event.status === 'failed' ? 'bg-red-100 text-red-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {event.status}
+                        </span>
+                        <span className="text-gray-600">{event.step}</span>
+                        {event.region_id && <span className="text-gray-400">({event.region_id})</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <a
+                href={job.debug_graph_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-2 text-blue-600 hover:text-blue-800"
+              >
+                <ExternalLink size={14} />
+                <span>View Full Debug Graph JSON</span>
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>

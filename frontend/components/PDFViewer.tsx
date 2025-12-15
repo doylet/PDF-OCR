@@ -9,6 +9,19 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
+interface DetectedRegion {
+  region_id: string;
+  region_type: string;
+  bbox: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+  page: number;
+  confidence: number;
+}
+
 interface PDFViewerProps {
   file: File | null;
   regions: Region[];
@@ -16,6 +29,7 @@ interface PDFViewerProps {
   onRegionRemove: (index: number) => void;
   currentPage: number;
   onPageChange: (page: number) => void;
+  detectedRegions?: DetectedRegion[];
 }
 
 export default function PDFViewer({
@@ -25,6 +39,7 @@ export default function PDFViewer({
   onRegionRemove,
   currentPage,
   onPageChange,
+  detectedRegions = [],
 }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -117,7 +132,35 @@ export default function PDFViewer({
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw existing regions for current page
+    // Draw detected regions (agentic) for current page
+    const pageDetectedRegions = detectedRegions.filter((r) => r.page === currentPage);
+    pageDetectedRegions.forEach((region) => {
+      // Convert from normalized fractions (0-1) to canvas pixels
+      const canvasX = region.bbox.x * canvas.width;
+      const canvasY = region.bbox.y * canvas.height;
+      const canvasWidth = region.bbox.w * canvas.width;
+      const canvasHeight = region.bbox.h * canvas.height;
+      
+      // Different colors based on region type
+      const color = region.region_type === 'TABLE' ? '#10b981' : 
+                    region.region_type === 'HEADING' ? '#f59e0b' : 
+                    '#8b5cf6';
+      
+      ctx.strokeStyle = color;
+      ctx.fillStyle = `${color}33`; // 20% opacity
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); // Dashed line for detected regions
+      ctx.fillRect(canvasX, canvasY, canvasWidth, canvasHeight);
+      ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+      ctx.setLineDash([]); // Reset
+
+      // Draw region type label
+      ctx.fillStyle = color;
+      ctx.font = 'bold 12px Arial';
+      ctx.fillText(`${region.region_type} (${Math.round(region.confidence * 100)}%)`, canvasX + 5, canvasY + 15);
+    });
+    
+    // Draw existing manual regions for current page
     const pageRegions = regions.filter((r) => r.page === currentPage);
     pageRegions.forEach((region, index) => {
       // Convert from normalized fractions (0-1) to canvas pixels
@@ -146,7 +189,7 @@ export default function PDFViewer({
       ctx.fillRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
       ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
     }
-  }, [regions, currentRect, currentPage, pageDimensions]);
+  }, [regions, detectedRegions, currentRect, currentPage, pageDimensions]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= numPages) {

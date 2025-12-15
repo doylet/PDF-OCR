@@ -22,6 +22,7 @@ export interface JobStatus {
   regions_count: number;
   result_url?: string;
   error_message?: string;
+  debug_graph_url?: string;
 }
 
 export interface UploadResponse {
