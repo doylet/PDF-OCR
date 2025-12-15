@@ -17,7 +17,7 @@ from datetime import datetime
 
 from app.models.document_graph import (
     DocumentGraph, Region, Extraction, AgentDecision,
-    RegionType, ValidationStatus, ExtractionMethod
+    RegionType, ValidationStatus, ExtractionMethod, JobOutcome
 )
 from app.agents.layout_agent import LayoutAgent
 
@@ -109,11 +109,25 @@ class ExpertOrchestrator:
         
         logger.info(f"Ingesting PDF: {self.pdf_path}")
         
+        self.graph.trace.append({
+            "step": "ingest_pdf",
+            "status": "started",
+            "pdf_path": str(self.pdf_path),
+            "timestamp": datetime.now().isoformat()
+        })
+        
         try:
             reader = PdfReader(self.pdf_path)
             num_pages = len(reader.pages)
             
             logger.info(f"PDF has {num_pages} pages")
+            
+            self.graph.trace.append({
+                "step": "ingest_pdf",
+                "status": "completed",
+                "pages_found": num_pages,
+                "timestamp": datetime.now().isoformat()
+            })
             
             # Analyze each page
             for page_num in range(num_pages):
@@ -164,6 +178,13 @@ class ExpertOrchestrator:
         """
         logger.info(f"Processing page {page_num}")
         
+        self.graph.trace.append({
+            "step": "process_page",
+            "status": "started",
+            "page_num": page_num,
+            "timestamp": datetime.now().isoformat()
+        })
+        
         page_info = self.graph.pages[page_num]
         
         # Step 1: Layout Agent
@@ -177,6 +198,15 @@ class ExpertOrchestrator:
         
         # Step 2: Dispatch to specialists
         page_regions = [r for r in self.graph.regions if r.page == page_num]
+        
+        self.graph.trace.append({
+            "step": "layout_agent",
+            "status": "completed",
+            "page_num": page_num,
+            "regions_proposed": len(page_regions),
+            "region_types": [r.region_type.value for r in page_regions],
+            "timestamp": datetime.now().isoformat()
+        })
         
         for region in page_regions:
             self._dispatch_to_specialist(region)
@@ -197,6 +227,15 @@ class ExpertOrchestrator:
         - TOTALS → Totals Agent
         """
         logger.info(f"Dispatching {region.region_id} (type: {region.region_type}) to specialist")
+        
+        self.graph.trace.append({
+            "step": "dispatch_to_specialist",
+            "status": "started",
+            "region_id": region.region_id,
+            "region_type": region.region_type.value,
+            "page": region.page,
+            "timestamp": datetime.now().isoformat()
+        })
         
         # Route based on type
         if region.region_type == RegionType.TABLE:
@@ -225,8 +264,23 @@ class ExpertOrchestrator:
         extraction = TableAgent.extract_table(self.graph, region)
         if extraction:
             self.graph.add_extraction(extraction)
+            self.graph.trace.append({
+                "step": "table_extraction",
+                "status": "success",
+                "region_id": region.region_id,
+                "rows_extracted": len(extraction.data.get('rows', [])),
+                "confidence": extraction.confidence,
+                "timestamp": datetime.now().isoformat()
+            })
         else:
             logger.warning(f"TableAgent returned no extraction for {region.region_id}")
+            self.graph.trace.append({
+                "step": "table_extraction",
+                "status": "failed",
+                "region_id": region.region_id,
+                "reason": "TableAgent returned None",
+                "timestamp": datetime.now().isoformat()
+            })
     
     def _extract_key_value(self, region: Region) -> None:
         """Extract key-value pairs (invoice details, etc.)"""
