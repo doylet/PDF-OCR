@@ -236,7 +236,7 @@ class LayoutAgent:
         return headings
     
     @staticmethod
-    def propose_table_regions(lines: List[List[Token]], page_num: int) -> List[Region]:
+    def propose_table_regions(lines: List[List[Token]], page_num: int, token_id_map: Dict[Token, int] = None) -> List[Region]:
         """
         Detect table-like structures in lines.
         
@@ -247,6 +247,9 @@ class LayoutAgent:
         """
         if len(lines) < 3:
             return []
+        
+        if token_id_map is None:
+            token_id_map = {}
         
         regions = []
         current_table_start = None
@@ -282,7 +285,7 @@ class LayoutAgent:
                 # End of potential table
                 if len(current_table_lines) >= 3:
                     region = LayoutAgent._create_table_region(
-                        current_table_lines, page_num, current_table_start
+                        current_table_lines, page_num, current_table_start, token_id_map
                     )
                     if region:
                         regions.append(region)
@@ -294,7 +297,7 @@ class LayoutAgent:
         if current_table_lines and len(current_table_lines) >= 3:
             logger.info(f"Flushing open table at end of page: {len(current_table_lines)} lines")
             region = LayoutAgent._create_table_region(
-                current_table_lines, page_num, current_table_start
+                current_table_lines, page_num, current_table_start, token_id_map
             )
             if region:
                 regions.append(region)
@@ -305,7 +308,8 @@ class LayoutAgent:
     def _create_table_region(
         table_lines: List[List[Token]], 
         page_num: int, 
-        start_idx: int
+        start_idx: int,
+        token_id_map: Dict[Token, int] = None
     ) -> Optional[Region]:
         """Create a table region from accumulated lines"""
         all_tokens = [t for line in table_lines for t in line]
@@ -318,6 +322,11 @@ class LayoutAgent:
         max_x = max(t.bbox.x + t.bbox.width for t in all_tokens)
         max_y = max(t.bbox.y + t.bbox.height for t in all_tokens)
         
+        # Get token IDs if mapping provided
+        token_ids = []
+        if token_id_map:
+            token_ids = [token_id_map.get(t) for t in all_tokens if t in token_id_map]
+        
         region = Region(
             region_id=f"table_p{page_num}_l{start_idx}",
             region_type=RegionType.TABLE,
@@ -325,9 +334,10 @@ class LayoutAgent:
             page=page_num,
             detected_by="layout_agent",
             confidence=0.7,
-            hints={"lines": len(table_lines)}
+            hints={"lines": len(table_lines)},
+            token_ids=token_ids
         )
-        logger.info(f"Proposed table region with {len(table_lines)} lines")
+        logger.info(f"Proposed table region with {len(table_lines)} lines, {len(token_ids)} tokens")
         return region
     
     @staticmethod
@@ -356,8 +366,11 @@ class LayoutAgent:
             })
             return
         
-        # Add tokens to graph
-        token_ids = [graph.add_token(token) for token in tokens]
+        # Add tokens to graph and build token ID map
+        token_id_map = {}
+        for token in tokens:
+            token_id = graph.add_token(token)
+            token_id_map[token] = token_id
         
         # Step 2: Cluster into lines
         lines = LayoutAgent.cluster_tokens_into_lines(tokens)
@@ -374,6 +387,9 @@ class LayoutAgent:
                 max_x = max(t.bbox.x + t.bbox.width for t in line_tokens)
                 max_y = max(t.bbox.y + t.bbox.height for t in line_tokens)
                 
+                # Get token IDs for this heading
+                heading_token_ids = [token_id_map[t] for t in line_tokens if t in token_id_map]
+                
                 region = Region(
                     region_id=f"heading_p{page_num}_l{line_idx}",
                     region_type=RegionType.HEADING,
@@ -381,12 +397,13 @@ class LayoutAgent:
                     page=page_num,
                     detected_by="layout_agent",
                     confidence=0.8,
-                    hints={"text": heading_text}
+                    hints={"text": heading_text},
+                    token_ids=heading_token_ids
                 )
                 graph.add_region(region)
         
         # Step 4: Propose table regions
-        table_regions = LayoutAgent.propose_table_regions(lines, page_num)
+        table_regions = LayoutAgent.propose_table_regions(lines, page_num, token_id_map)
         for region in table_regions:
             graph.add_region(region)
         
