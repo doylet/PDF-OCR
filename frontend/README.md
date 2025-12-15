@@ -24,19 +24,35 @@ npm install
 
 ## Configuration
 
-Create `.env.local` file:
+### Local Development
+
+Copy the example environment file and update it:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_API_KEY=your-api-key
+NEXT_PUBLIC_API_KEY=dev-api-key-change-in-production
 ```
 
-For production:
+**Important:** The `NEXT_PUBLIC_API_URL` environment variable is **required**. The application will fail to start if it's not set.
 
-```env
-NEXT_PUBLIC_API_URL=https://your-backend.run.app
-NEXT_PUBLIC_API_KEY=your-production-api-key
-```
+### Production Deployment
+
+For production builds, environment variables must be set at **build time**:
+
+- **Via GitHub Actions**: Set `BACKEND_API_URL` and `API_KEY` as repository secrets
+- **Via `deploy.sh`**: The script will prompt for values
+- **Via Cloud Build**: Update default substitutions in `cloudbuild.yaml`:
+  ```yaml
+  substitutions:
+    _API_URL: 'https://your-backend-url.run.app'
+    _API_KEY: 'your-production-api-key'
+  ```
 
 ## Development
 

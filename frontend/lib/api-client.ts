@@ -1,6 +1,20 @@
 import { ExtractionRequest, JobStatus, UploadResponse } from '@/types/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Get API configuration from environment variables
+// In production, these MUST be set at build time via build args
+const getAPIURL = (): string => {
+  const url = process.env.NEXT_PUBLIC_API_URL;
+  if (!url) {
+    throw new Error(
+      'NEXT_PUBLIC_API_URL is not configured. ' +
+      'For local development, create a .env.local file with NEXT_PUBLIC_API_URL=http://localhost:8000. ' +
+      'For production, ensure the environment variable is set during build.'
+    );
+  }
+  return url;
+};
+
+const API_URL = getAPIURL();
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'dev-api-key-change-in-production';
 
 class APIClient {
