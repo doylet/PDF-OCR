@@ -54,6 +54,14 @@ class ValidationStatus(str, Enum):
     PENDING = "pending"
 
 
+class JobOutcome(str, Enum):
+    """Overall job result classification"""
+    SUCCESS = "success"  # At least one valid extraction
+    PARTIAL_SUCCESS = "partial_success"  # Some extractions failed/low confidence
+    NO_MATCH = "no_match"  # Agent ran but found nothing
+    FAILED = "failed"  # Processing error
+
+
 @dataclass
 class BBox:
     """Bounding box in normalized coordinates (0-1)"""
@@ -209,8 +217,12 @@ class DocumentGraph:
     
     # Job state
     status: str = "pending"
+    outcome: Optional[JobOutcome] = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
+    
+    # Trace/Summary for observability
+    trace: List[Dict[str, Any]] = field(default_factory=list)
     
     def add_token(self, token: Token) -> int:
         """Add a token and return its ID"""

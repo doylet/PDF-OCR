@@ -171,21 +171,53 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
                     "method": extraction.method.name
                 })
         
+        # Log outcome
+        outcome = graph.outcome.value if graph.outcome else "unknown"
+        logger.info(f"Job {job_id} outcome: {outcome}, regions={len(graph.regions)}, extractions={len(results)}")
+        
+        # Add metadata to results
+        summary = {
+            "outcome": outcome,
+            "pages": len(graph.pages),
+            "regions_proposed": len(graph.regions),
+            "regions_extracted": len(results),
+            "trace": graph.trace
+        }
+        
         if request.output_format == "csv":
             formatted_content = formatter_service.format_as_csv(results)
         elif request.output_format == "tsv":
             formatted_content = formatter_service.format_as_tsv(results)
         else:
-            formatted_content = formatter_service.format_as_json(results)
+            # JSON includes metadata
+            formatted_content = formatter_service.format_as_json({
+                "summary": summary,
+                "results": results
+            })
         
         result_url = storage_service.upload_result(job_id, formatted_content, request.output_format)
         
+        # Store full graph with metadata
         graph_dict = graph.to_dict()
+        graph_dict["summary"] = summary
         storage_service.upload_result(job_id, str(graph_dict), "json", suffix="_graph")
         
-        job_service.update_job_status(job_id, "completed", result_url=result_url)
+        # Status message based on outcome
+        if outcome == "no_match":
+            status_msg = f"No extractable data found ({len(graph.regions)} regions detected)"
+        elif outcome == "partial_success":
+            status_msg = f"Partial extraction: {len(results)} of {len(graph.extractions)} succeeded"
+        else:
+            status_msg = None
         
-        logger.info(f"Completed agentic extraction job: {job_id}")
+        job_service.update_job_status(
+            job_id, 
+            "completed", 
+            result_url=result_url,
+            error_message=status_msg if outcome == "no_match" else None
+        )
+        
+        logger.info(f"Completed agentic extraction job: {job_id}, outcome: {outcome}")
     
     except Exception as e:
         logger.error(f"Error processing agentic extraction job {job_id}: {e}")

@@ -65,6 +65,13 @@ class LayoutAgent:
         'mobile', 'sms', 'mms', 'international', 'roaming'
     ]
     
+    # Table stop cues (semantic end-of-table indicators)
+    TABLE_STOP_CUES = [
+        'total', 'subtotal', 'balance', 'grand total',
+        'gigabyte', 'megabyte', 'kilobyte',
+        '1 gigabyte', '1 megabyte', '1 gb =', '1 mb ='
+    ]
+    
     @staticmethod
     def infer_token_type(text: str) -> TokenType:
         """Classify token by pattern matching"""
@@ -217,44 +224,82 @@ class LayoutAgent:
         current_table_lines = []
         
         for idx, line_tokens in enumerate(lines):
+            # Check for semantic stop cues (totals, unit explanations)
+            line_text = ' '.join(t.text for t in line_tokens).lower()
+            is_stop_cue = any(cue in line_text for cue in LayoutAgent.TABLE_STOP_CUES)
+            
             # Check if line looks table-like
             has_structure = len(line_tokens) >= 2
             has_numbers = any(t.token_type in [TokenType.NUMBER, TokenType.CURRENCY, 
                                                TokenType.DATA_VOLUME, TokenType.DATE] 
                              for t in line_tokens)
             
-            if has_structure and has_numbers:
+            # Stop cues end the table
+            if is_stop_cue and current_table_lines:
+                logger.info(f"Stop cue detected at line {idx}: '{line_text[:50]}'")
+                if len(current_table_lines) >= 3:
+                    region = LayoutAgent._create_table_region(
+                        current_table_lines, page_num, current_table_start
+                    )
+                    if region:
+                        regions.append(region)
+                current_table_start = None
+                current_table_lines = []
+            elif has_structure and has_numbers and not is_stop_cue:
                 if current_table_start is None:
                     current_table_start = idx
                 current_table_lines.append(line_tokens)
             else:
                 # End of potential table
                 if len(current_table_lines) >= 3:
-                    # Create region
-                    all_tokens = [t for line in current_table_lines for t in line]
-                    if all_tokens:
-                        # Calculate bounding box
-                        min_x = min(t.bbox.x for t in all_tokens)
-                        min_y = min(t.bbox.y for t in all_tokens)
-                        max_x = max(t.bbox.x + t.bbox.width for t in all_tokens)
-                        max_y = max(t.bbox.y + t.bbox.height for t in all_tokens)
-                        
-                        region = Region(
-                            region_id=f"table_p{page_num}_l{current_table_start}",
-                            region_type=RegionType.TABLE,
-                            bbox=BBox(min_x, min_y, max_x - min_x, max_y - min_y),
-                            page=page_num,
-                            detected_by="layout_agent",
-                            confidence=0.7,
-                            hints={"lines": len(current_table_lines)}
-                        )
+                    region = LayoutAgent._create_table_region(
+                        current_table_lines, page_num, current_table_start
+                    )
+                    if region:
                         regions.append(region)
-                        logger.info(f"Proposed table region with {len(current_table_lines)} lines")
                 
                 current_table_start = None
                 current_table_lines = []
         
+        # CRITICAL: Flush any open table at end of page
+        if current_table_lines and len(current_table_lines) >= 3:
+            logger.info(f"Flushing open table at end of page: {len(current_table_lines)} lines")
+            region = LayoutAgent._create_table_region(
+                current_table_lines, page_num, current_table_start
+            )
+            if region:
+                regions.append(region)
+        
         return regions
+    
+    @staticmethod
+    def _create_table_region(
+        table_lines: List[List[Token]], 
+        page_num: int, 
+        start_idx: int
+    ) -> Optional[Region]:
+        """Create a table region from accumulated lines"""
+        all_tokens = [t for line in table_lines for t in line]
+        if not all_tokens:
+            return None
+        
+        # Calculate bounding box
+        min_x = min(t.bbox.x for t in all_tokens)
+        min_y = min(t.bbox.y for t in all_tokens)
+        max_x = max(t.bbox.x + t.bbox.width for t in all_tokens)
+        max_y = max(t.bbox.y + t.bbox.height for t in all_tokens)
+        
+        region = Region(
+            region_id=f"table_p{page_num}_l{start_idx}",
+            region_type=RegionType.TABLE,
+            bbox=BBox(min_x, min_y, max_x - min_x, max_y - min_y),
+            page=page_num,
+            detected_by="layout_agent",
+            confidence=0.7,
+            hints={"lines": len(table_lines)}
+        )
+        logger.info(f"Proposed table region with {len(table_lines)} lines")
+        return region
     
     @staticmethod
     def process_page(graph: DocumentGraph, page_num: int, pdf_path: str) -> None:

@@ -74,12 +74,22 @@ class ExpertOrchestrator:
             # Step 4: Handle retries for failed validations
             self._handle_retries()
             
+            # Step 5: Determine outcome
+            self._determine_outcome()
+            
             self.graph.status = "completed"
-            logger.info(f"Orchestration completed for job {self.job_id}")
+            logger.info(f"Orchestration completed for job {self.job_id}, outcome: {self.graph.outcome}")
             
         except Exception as e:
             logger.error(f"Orchestration failed for job {self.job_id}: {e}")
             self.graph.status = "failed"
+            self.graph.outcome = "FAILED"
+            self.graph.trace.append({
+                "step": "orchestration",
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            })
             self.graph.decisions.append({
                 "agent": "orchestrator",
                 "timestamp": datetime.now().isoformat(),
@@ -402,3 +412,59 @@ class ExpertOrchestrator:
             evidence=[extraction.extraction_id],
             explanation="Unable to determine automatic fix"
         )
+    
+    def _determine_outcome(self) -> None:
+        """
+        Determine overall job outcome based on regions and extractions.
+        
+        Critical rule: If regions_proposed == 0 → NO_MATCH, not SUCCESS
+        """
+        from app.models.document_graph import JobOutcome
+        
+        regions_proposed = len(self.graph.regions)
+        extractions_count = len(self.graph.extractions)
+        passed = [e for e in self.graph.extractions if e.validation_status.name == "PASS"]
+        failed = [e for e in self.graph.extractions if e.validation_status.name == "FAIL"]
+        
+        logger.info(f"Determining outcome: {regions_proposed} regions, {extractions_count} extractions, {len(passed)} passed")
+        
+        if regions_proposed == 0:
+            # Agent ran but found nothing
+            self.graph.outcome = JobOutcome.NO_MATCH
+            self.graph.trace.append({
+                "step": "determine_outcome",
+                "status": "no_match",
+                "reason": "No extractable regions detected",
+                "regions_proposed": 0,
+                "timestamp": datetime.now().isoformat()
+            })
+        elif len(passed) == 0:
+            # Regions found but all extractions failed
+            self.graph.outcome = JobOutcome.NO_MATCH
+            self.graph.trace.append({
+                "step": "determine_outcome",
+                "status": "no_match",
+                "reason": "Extractions failed validation",
+                "regions_proposed": regions_proposed,
+                "extractions_attempted": extractions_count,
+                "timestamp": datetime.now().isoformat()
+            })
+        elif len(failed) > 0:
+            # Some passed, some failed
+            self.graph.outcome = JobOutcome.PARTIAL_SUCCESS
+            self.graph.trace.append({
+                "step": "determine_outcome",
+                "status": "partial_success",
+                "passed": len(passed),
+                "failed": len(failed),
+                "timestamp": datetime.now().isoformat()
+            })
+        else:
+            # All passed
+            self.graph.outcome = JobOutcome.SUCCESS
+            self.graph.trace.append({
+                "step": "determine_outcome",
+                "status": "success",
+                "extractions": len(passed),
+                "timestamp": datetime.now().isoformat()
+            })
