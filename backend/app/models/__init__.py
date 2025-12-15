@@ -1,8 +1,18 @@
 """Data models for document understanding"""
+# API models (for FastAPI endpoints)
+from .api import (
+    Region,
+    ExtractionRequest,
+    JobStatus,
+    ExtractionResult,
+    UploadResponse
+)
+
+# Document graph models (for agentic pipeline)
 from .document_graph import (
     DocumentGraph,
     Token,
-    Region,
+    Region as GraphRegion,
     Extraction,
     BBox,
     TokenType,
@@ -13,9 +23,16 @@ from .document_graph import (
 )
 
 __all__ = [
+    # API models
+    'Region',
+    'ExtractionRequest',
+    'JobStatus',
+    'ExtractionResult',
+    'UploadResponse',
+    # Document graph models
     'DocumentGraph',
     'Token',
-    'Region',
+    'GraphRegion',
     'Extraction',
     'BBox',
     'TokenType',
