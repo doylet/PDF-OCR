@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
+COPY main.py .
 
 # Expose port
 EXPOSE 8080
@@ -34,4 +35,4 @@ ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 
 # Run the application
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT}
