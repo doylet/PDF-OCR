@@ -62,6 +62,16 @@ class APIClient {
     });
   }
 
+  async createAgenticExtractionJob(request: ExtractionRequest): Promise<JobStatus> {
+    return this.fetch('/api/extract/agentic', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+  }
+
   async getJobStatus(jobId: string): Promise<JobStatus> {
     return this.fetch(`/api/extract/${jobId}`);
   }

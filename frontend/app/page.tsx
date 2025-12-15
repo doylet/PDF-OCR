@@ -20,6 +20,7 @@ export default function Home() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [outputFormat, setOutputFormat] = useState<'csv' | 'tsv' | 'json'>('csv');
+  const [extractionMethod, setExtractionMethod] = useState<'classic' | 'agentic'>('classic');
   const [job, setJob] = useState<JobStatus | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -85,17 +86,23 @@ export default function Home() {
   };
 
   const handleExtract = async () => {
-    if (!pdfId || regions.length === 0) return;
+    if (!pdfId) return;
+    if (extractionMethod === 'classic' && regions.length === 0) return;
 
     setIsProcessing(true);
     setError(null);
 
     try {
-      const job = await apiClient.createExtractionJob({
+      const extractionRequest = {
         pdf_id: pdfId,
         regions,
         output_format: outputFormat,
-      });
+      };
+      
+      const job = extractionMethod === 'agentic'
+        ? await apiClient.createAgenticExtractionJob(extractionRequest)
+        : await apiClient.createExtractionJob(extractionRequest);
+      
       setJob(job);
     } catch (err) {
       setError(`Extraction failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -208,6 +215,23 @@ export default function Home() {
                 <h3 className="text-lg font-semibold mb-3">Export Settings</h3>
                 <div className="space-y-3">
                   <div>
+                    <label className="block text-sm font-medium mb-1">Extraction Method</label>
+                    <select
+                      value={extractionMethod}
+                      onChange={(e) => setExtractionMethod(e.target.value as any)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                    >
+                      <option value="classic">Classic (Manual Regions)</option>
+                      <option value="agentic">Agentic (Auto-Detect)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {extractionMethod === 'agentic' 
+                        ? '🤖 AI agents auto-detect tables and structure'
+                        : '📍 Manually select regions to extract'}
+                    </p>
+                  </div>
+                  
+                  <div>
                     <label className="block text-sm font-medium mb-1">Output Format</label>
                     <select
                       value={outputFormat}
@@ -222,7 +246,7 @@ export default function Home() {
 
                   <button
                     onClick={handleExtract}
-                    disabled={regions.length === 0 || isProcessing || !pdfId}
+                    disabled={(extractionMethod === 'classic' && regions.length === 0) || isProcessing || !pdfId}
                     className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-semibold"
                   >
                     {isProcessing ? 'Starting Extraction...' : 'Extract Data'}

@@ -64,9 +64,9 @@ class StorageService:
         blob = self.get_pdf_blob(pdf_id)
         return blob.download_as_bytes()
     
-    def upload_result(self, job_id: str, content: str, format: str) -> str:
+    def upload_result(self, job_id: str, content: str, format: str, suffix: str = "") -> str:
         """Upload extraction result and return public URL"""
-        blob_name = f"{settings.gcs_results_folder}/{job_id}/result.{format}"
+        blob_name = f"{settings.gcs_results_folder}/{job_id}/result{suffix}.{format}"
         
         bucket = self.get_bucket()
         blob = bucket.blob(blob_name)
@@ -79,7 +79,7 @@ class StorageService:
             method="GET"
         )
         
-        logger.info(f"Uploaded result for job: {job_id}")
+        logger.info(f"Uploaded result{suffix} for job: {job_id}")
         return result_url
     
     def upload_debug_artifact(self, job_id: str, artifact_name: str, content: bytes, content_type: str = "image/png") -> str:
