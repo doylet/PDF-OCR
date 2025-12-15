@@ -162,14 +162,22 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
         graph = orchestrator.run()
         
         results = []
-        for extraction in graph.extractions:
+        for idx, extraction in enumerate(graph.extractions):
             if extraction.validation_status.name == "PASS":
-                results.append({
-                    "region_id": extraction.region_id,
-                    "data": extraction.data,
-                    "confidence": extraction.confidence,
-                    "method": extraction.method.name
-                })
+                # Get region for page info
+                region = next((r for r in graph.regions if r.region_id == extraction.region_id), None)
+                page = region.page if region else 0
+                
+                # Convert to ExtractionResult for formatter compatibility
+                from app.models.api import ExtractionResult
+                result = ExtractionResult(
+                    region_index=idx,
+                    page=page,
+                    text=extraction.data.get("text", str(extraction.data)),
+                    confidence=extraction.confidence,
+                    structured_data=extraction.data if extraction.data else None
+                )
+                results.append(result)
         
         # Log outcome
         outcome = graph.outcome if graph.outcome else "unknown"
@@ -190,10 +198,11 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
             formatted_content = formatter_service.format_as_tsv(results)
         else:
             # JSON includes metadata
-            formatted_content = formatter_service.format_as_json({
+            import json
+            formatted_content = json.dumps({
                 "summary": summary,
-                "results": results
-            })
+                "results": [r.dict() for r in results]
+            }, indent=2)
         
         result_url = storage_service.upload_result(job_id, formatted_content, request.output_format)
         
