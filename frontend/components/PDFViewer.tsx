@@ -634,7 +634,7 @@ export default function PDFViewer({
         currentRect.height
       );
     }
-  }, [regions, editedRegions, currentRect, currentPage, pageDimensions, selectedRegion, hoveredRegion, selectedForExtraction]);
+  }, [editedRegions, currentRect, currentPage, pageDimensions, selectedRegion, hoveredRegion, selectedForExtraction, approvedRegions]);
 
   if (!file) {
     return (
