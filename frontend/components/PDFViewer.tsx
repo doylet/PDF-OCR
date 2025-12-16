@@ -95,10 +95,38 @@ export default function PDFViewer({
   const [selectedForExtraction, setSelectedForExtraction] = useState<Set<string>>(new Set());
   const [originalRegionBeforeEdit, setOriginalRegionBeforeEdit] = useState<DetectedRegion | null>(null);
   
+  // Draggable controls state
+  const [controlsPosition, setControlsPosition] = useState({ x: 0, y: 80 });
+  const [isDraggingControls, setIsDraggingControls] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isControlsMinimized, setIsControlsMinimized] = useState(false);
+  
+  // Zoom and pan state
+  const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [showHints, setShowHints] = useState(true);
+  
   // Update edited regions when detectedRegions changes
   useEffect(() => {
     setEditedRegions(detectedRegions);
   }, [detectedRegions]);
+
+  // Update scale when zoom level changes
+  useEffect(() => {
+    if (pageDimensions && containerRef.current) {
+      const container = containerRef.current;
+      const containerWidth = container.clientWidth - 48;
+      const containerHeight = container.clientHeight - 48;
+      
+      const scaleWidth = containerWidth / pageDimensions.width;
+      const scaleHeight = containerHeight / pageDimensions.height;
+      const optimalScale = Math.min(scaleWidth, scaleHeight, 2.0);
+      
+      setScale(optimalScale * zoomLevel);
+    }
+  }, [zoomLevel, pageDimensions]);
 
   // Create a stable blob URL from the file
   useEffect(() => {
@@ -138,7 +166,7 @@ export default function PDFViewer({
       const scaleHeight = containerHeight / viewport.height;
       const optimalScale = Math.min(scaleWidth, scaleHeight, 2.0); // Cap at 2x
       
-      setScale(optimalScale);
+      setScale(optimalScale * zoomLevel);
     }
     
     setPageDimensions({
@@ -636,6 +664,32 @@ export default function PDFViewer({
     }
   }, [editedRegions, currentRect, currentPage, pageDimensions, selectedRegion, hoveredRegion, selectedForExtraction, approvedRegions]);
 
+  // Global mouse handlers for dragging controls
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingControls) {
+        setControlsPosition({
+          x: e.clientX - dragOffset.x,
+          y: e.clientY - dragOffset.y
+        });
+      }
+    };
+    
+    const handleMouseUp = () => {
+      setIsDraggingControls(false);
+    };
+    
+    if (isDraggingControls) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingControls, dragOffset]);
+
   if (!file) {
     return (
       <div className="flex-1 bg-slate-900 rounded-lg border border-slate-700 p-8">
@@ -705,8 +759,25 @@ export default function PDFViewer({
         <div
           ref={containerRef}
           className="absolute inset-0 overflow-auto flex items-center justify-center"
+          onMouseDown={(e) => {
+            if (e.target === containerRef.current && (e.button === 1 || (e.button === 0 && e.shiftKey))) {
+              setIsPanning(true);
+              setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+              e.preventDefault();
+            }
+          }}
+          onMouseMove={(e) => {
+            if (isPanning) {
+              setPanOffset({
+                x: e.clientX - panStart.x,
+                y: e.clientY - panStart.y
+              });
+            }
+          }}
+          onMouseUp={() => setIsPanning(false)}
+          onMouseLeave={() => setIsPanning(false)}
         >
-          <div className="relative">
+          <div className="relative" style={{ transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }}>
             <Document
               file={blobUrl}
               onLoadSuccess={onDocumentLoadSuccess}
@@ -742,8 +813,48 @@ export default function PDFViewer({
           </div>
         </div>
 
+        {/* Zoom Controls */}
+        <div className="absolute top-4 right-4 bg-slate-800/95 backdrop-blur-sm rounded-lg border border-slate-600 shadow-lg z-30 flex flex-col gap-1 p-2">
+          <button
+            onClick={() => setZoomLevel(prev => Math.min(prev + 0.2, 3.0))}
+            className="px-2 py-1 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition"
+            title="Zoom In"
+          >
+            +
+          </button>
+          <button
+            onClick={() => setZoomLevel(1.0)}
+            className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700 rounded transition"
+            title="Reset Zoom"
+          >
+            {Math.round(zoomLevel * 100)}%
+          </button>
+          <button
+            onClick={() => setZoomLevel(prev => Math.max(prev - 0.2, 0.5))}
+            className="px-2 py-1 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition"
+            title="Zoom Out"
+          >
+            −
+          </button>
+          <div className="border-t border-slate-600 my-1"></div>
+          <button
+            onClick={() => setPanOffset({ x: 0, y: 0 })}
+            className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700 rounded transition"
+            title="Reset Pan"
+          >
+            ⊙
+          </button>
+          <button
+            onClick={() => setShowHints(!showHints)}
+            className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700 rounded transition"
+            title="Toggle Hints"
+          >
+            {showHints ? '👁' : '👁‍🗨'}
+          </button>
+        </div>
+
         {/* Detected regions indicator */}
-        {editedRegions.length > 0 && (() => {
+        {showHints && editedRegions.length > 0 && (() => {
           const currentPageRegions = editedRegions.filter((r) => r.page === currentPage);
           return (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800/95 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-600 z-10">
@@ -756,21 +867,70 @@ export default function PDFViewer({
         })()}
 
         {/* Drawing hint - positioned to avoid overlap */}
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
-          <p className="text-xs text-slate-300">
-            {selectedRegion 
-              ? 'Edit region: drag to move, resize handles, or delete' 
-              : 'Click to edit region • Cmd/Ctrl+Click to toggle extraction • Drag to draw new'}
-          </p>
-        </div>
+        {showHints && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
+            <p className="text-xs text-slate-300">
+              {selectedRegion 
+                ? 'Edit region: drag to move, resize handles, or delete' 
+                : 'Click to edit • Cmd/Ctrl+Click extraction • Shift+Drag to pan'}
+            </p>
+          </div>
+        )}
 
-        {/* Region Edit Controls */}
+        {/* Region Edit Controls - Draggable */}
         {selectedRegion && (() => {
           const region = editedRegions.find(r => r.region_id === selectedRegion);
           if (!region || region.page !== currentPage) return null;
           
           return (
-            <div className="absolute top-16 right-4 bg-slate-800/95 backdrop-blur-sm px-4 py-3 rounded-lg border border-slate-600 shadow-lg z-20 space-y-2">
+            <div 
+              className="absolute bg-slate-800/95 backdrop-blur-sm rounded-lg border border-slate-600 shadow-lg z-20"
+              style={{ 
+                right: `${16 - controlsPosition.x}px`, 
+                top: `${controlsPosition.y}px`,
+                minWidth: isControlsMinimized ? '120px' : '240px'
+              }}
+              onMouseDown={(e) => {
+                if ((e.target as HTMLElement).classList.contains('drag-handle')) {
+                  setIsDraggingControls(true);
+                  setDragOffset({
+                    x: e.clientX - controlsPosition.x,
+                    y: e.clientY - controlsPosition.y
+                  });
+                  e.stopPropagation();
+                }
+              }}
+            >
+              {/* Drag Handle */}
+              <div 
+                className="drag-handle flex items-center justify-between px-3 py-2 border-b border-slate-600 cursor-move bg-slate-700/50"
+                onMouseDown={(e) => {
+                  setIsDraggingControls(true);
+                  setDragOffset({
+                    x: e.clientX - controlsPosition.x,
+                    y: e.clientY - controlsPosition.y
+                  });
+                }}
+              >
+                <span className="text-xs font-semibold text-slate-300">Region Controls</span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setIsControlsMinimized(!isControlsMinimized)}
+                    className="px-1.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    {isControlsMinimized ? '□' : '−'}
+                  </button>
+                  <button
+                    onClick={() => { setSelectedRegion(null); if (onRegionSelected) onRegionSelected(null); }}
+                    className="px-1.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              
+              {!isControlsMinimized && (
+                <div className="px-4 py-3 space-y-2">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-medium text-slate-300">Region Type:</span>
                 <select
@@ -819,6 +979,8 @@ export default function PDFViewer({
                 <span>×</span>
                 Delete Region
               </button>
+                </div>
+              )}
             </div>
           );
         })()}

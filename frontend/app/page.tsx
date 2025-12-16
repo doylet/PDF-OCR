@@ -4,21 +4,19 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Region, JobStatus, DetectedRegion } from "@/types/api";
 import { apiClient } from "@/lib/api-client";
+import { cn, theme } from "@/lib/theme";
+import { Button, Card, CardHeader, CardContent, FileUpload, FileInfo, RegionItem, StatusIndicator } from "@/components/ui";
 
 import {
-  Upload,
   FileText,
   Sparkles,
   Grid3x3,
   Download,
   Loader2,
   X,
-  Brain,
-  Play,
   AlertCircle,
-  Eye,
   Database,
-  Check,
+  Play,
 } from "lucide-react";
 
 // Dynamically import PDFViewer to avoid SSR issues
@@ -48,6 +46,7 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedRegionIds, setSelectedRegionIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   // Poll job status
@@ -250,12 +249,23 @@ export default function Home() {
     if (!pdfId) return;
     if (detectedRegions.length === 0) return;
 
+    // Only extract selected regions, or all if none are selected
+    const regionsToExtract = selectedRegionIds.size > 0 
+      ? detectedRegions.filter(r => selectedRegionIds.has(r.region_id))
+      : detectedRegions;
+
+    if (regionsToExtract.length === 0) {
+      setError("No regions selected for extraction");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
 
     try {
       // Convert DetectedRegions back to Region format for extraction
-      const regions: Region[] = detectedRegions.map((r) => ({
+      const regions: Region[] = regionsToExtract.map((r) => ({
         x: r.bbox.x,
         y: r.bbox.y,
         width: r.bbox.w,
@@ -306,18 +316,31 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className={cn('min-h-screen', theme.colors.background.primary)}>
       {/* Header */}
-      <header className="bg-slate-900/50 border-b border-slate-800 backdrop-blur-xl sticky top-0 z-50">
+      <header className={cn(
+        theme.colors.background.overlay,
+        'border-b',
+        theme.colors.border.secondary,
+        theme.effects.backdropBlurXl,
+        'sticky top-0 z-50'
+      )}>
         <div className="max-w-[1800px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                <FileText className="text-white" size={18} />
+              <div className={cn(
+                'w-8 h-8',
+                'bg-gradient-to-br from-blue-500 to-indigo-600',
+                theme.radius.lg,
+                'flex items-center justify-center'
+              )}>
+                <FileText className={theme.colors.text.primary} size={18} />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-white">PDF-OCR</h1>
-                <p className="text-xs text-slate-400">
+                <h1 className={cn('text-lg font-semibold', theme.colors.text.primary)}>
+                  PDF-OCR
+                </h1>
+                <p className={cn('text-xs', theme.colors.text.muted)}>
                   Document Intelligence Platform
                 </p>
               </div>
@@ -325,27 +348,16 @@ export default function Home() {
 
             {file && (
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-3 px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg">
-                  <FileText className="text-slate-400" size={16} />
-                  <div>
-                    <p className="text-sm text-slate-200">{file.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {(file.size / 1024).toFixed(1)} KB
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
+                <FileInfo 
+                  file={file}
+                  onRemove={() => {
                     setFile(null);
                     setPdfId(null);
                     setDetectedRegions([]);
                     setApprovedRegions([]);
                     setJob(null);
                   }}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-                >
-                  <X size={18} />
-                </button>
+                />
               </div>
             )}
           </div>
@@ -355,17 +367,19 @@ export default function Home() {
       <main className="max-w-[1800px] mx-auto px-6 py-6">
         {/* Error Display */}
         {error && (
-          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
-            <AlertCircle
-              className="text-red-400 flex-shrink-0 mt-0.5"
-              size={18}
-            />
+          <div className={cn(
+            'mb-4 p-4',
+            'bg-red-500/10 border border-red-500/30',
+            theme.radius.lg,
+            'flex items-start gap-3'
+          )}>
+            <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={18} />
             <div className="flex-1">
               <p className="text-sm text-red-300">{error}</p>
             </div>
             <button
               onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-300 transition"
+              className={cn('text-red-400 hover:text-red-300', theme.transitions.default)}
             >
               <X size={16} />
             </button>
@@ -375,47 +389,15 @@ export default function Home() {
         {!file ? (
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <h2 className={cn('text-3xl font-bold mb-2', theme.colors.text.primary)}>
                 Extract Structured Data from PDFs
               </h2>
-              <p className="text-slate-400">
+              <p className={theme.colors.text.muted}>
                 Powered by AI agents and GCP Document AI
               </p>
             </div>
 
-            <label className="block cursor-pointer group">
-              <div className="bg-slate-900/50 border-2 border-dashed border-slate-700 hover:border-blue-500/50 rounded-xl p-16 text-center transition-all hover:bg-slate-900/80">
-                {isUploading ? (
-                  <div className="flex flex-col items-center">
-                    <Loader2
-                      className="text-blue-500 animate-spin mb-4"
-                      size={48}
-                    />
-                    <p className="text-slate-300 font-medium">Uploading...</p>
-                  </div>
-                ) : (
-                  <>
-                    <Upload
-                      className="mx-auto text-slate-500 group-hover:text-blue-500 transition mb-4"
-                      size={48}
-                    />
-                    <p className="text-lg text-slate-200 font-medium mb-2">
-                      Drop your PDF here or click to browse
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      Supports PDF files up to 50MB
-                    </p>
-                  </>
-                )}
-              </div>
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileChange}
-                disabled={isUploading}
-                className="hidden"
-              />
-            </label>
+            <FileUpload onFileSelect={handleFileChange} isUploading={isUploading} />
 
             <div className="grid md:grid-cols-2 gap-4 mt-8">
               <div className="bg-slate-900/30 border border-slate-800 rounded-lg p-6">
@@ -463,26 +445,21 @@ export default function Home() {
             <div className="flex-1 space-y-4 min-w-0 overflow-y-auto">
               {/* AI Detection Status */}
               {isDetecting && (
-                <div className="bg-slate-900/50 border border-slate-800 rounded-lg">
-                  <div className="px-4 py-3 border-b border-slate-800">
-                    <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                      <Brain className="text-blue-400" size={16} />
-                      AI Region Detection
-                    </h3>
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="text-blue-500 animate-spin" size={20} />
-                      <span className="text-sm text-slate-300">Analyzing document...</span>
-                    </div>
-                  </div>
-                </div>
+                <Card>
+                  <CardHeader title="AI Region Detection" />
+                  <CardContent>
+                    <StatusIndicator status="processing" message="Analyzing document..." />
+                  </CardContent>
+                </Card>
               )}
               
               {detectedRegions.length > 0 && !isDetecting && (
-                <div className="bg-slate-900/50 border border-emerald-800/50 rounded-lg">
+                <Card className="border-emerald-800/50">
                   <div className="p-3 flex items-center gap-2">
-                    <Check className="text-emerald-400" size={16} />
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="8" r="7" className="stroke-emerald-400" strokeWidth="2" />
+                      <path d="M5 8l2 2 4-5" className="stroke-emerald-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                     <p className="text-xs text-emerald-400">
                       {(() => {
                         const pageRegionsCount = detectedRegions.filter(r => r.page === currentPage).length;
@@ -497,12 +474,8 @@ export default function Home() {
               )}
 
               {/* Regions List - showing detected regions for current page */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-lg">
-                <div className="px-4 py-3 border-b border-slate-800">
-                  <h3 className="text-sm font-semibold text-slate-200">
-                    Regions on Page {currentPage}
-                  </h3>
-                </div>
+              <Card>
+                <CardHeader title={`Regions on Page ${currentPage}`} />
                   <div className="p-3">
                     {(() => {
                       const pageRegions = detectedRegions.filter(r => r.page === currentPage);
@@ -511,10 +484,10 @@ export default function Home() {
                         return (
                           <div className="text-center py-8">
                             <Grid3x3
-                              className="mx-auto text-slate-700 mb-2"
+                              className={cn('mx-auto mb-2', theme.colors.text.disabled)}
                               size={32}
                             />
-                            <p className="text-xs text-slate-500">
+                            <p className={cn('text-xs', theme.colors.text.subtle)}>
                               {detectedRegions.length === 0 
                                 ? 'AI will detect regions automatically' 
                                 : 'No regions on this page'}
@@ -525,179 +498,64 @@ export default function Home() {
                       
                       return (
                         <div className="space-y-2 max-h-[320px] overflow-y-auto">
-                          {pageRegions.map((region) => {
-                            const typeColors: Record<string, string> = {
-                              TABLE: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-                              HEADING: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
-                              LIST: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
-                              TEXT: 'text-blue-400 border-blue-500/30 bg-blue-500/10',
-                              NONE: 'text-slate-400 border-slate-500/30 bg-slate-500/10',
-                            };
-                            const colorClasses = typeColors[region.region_type] || typeColors.TEXT;
-                            
-                            return (
-                              <div
-                                key={region.region_id}
-                                className={`border rounded-lg p-3 ${colorClasses}`}
-                              >
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex-1">
-                                    <span className="text-xs font-bold uppercase">
-                                      {region.region_type}
-                                    </span>
-                                    <p className="text-xs opacity-70 mt-0.5">
-                                      {Math.round(region.confidence * 100)}% confidence
-                                    </p>
-                                  </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-current/20">
-                                  <input
-                                    type="checkbox"
-                                    id={`extract-${region.region_id}`}
-                                    className="w-4 h-4 rounded border-current/30 bg-slate-900/50 text-current focus:ring-current focus:ring-offset-0"
-                                  />
-                                  <label
-                                    htmlFor={`extract-${region.region_id}`}
-                                    className="text-xs font-medium cursor-pointer select-none"
-                                  >
-                                    Include in extraction
-                                  </label>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {pageRegions.map((region) => (
+                            <RegionItem
+                              key={region.region_id}
+                              region={region}
+                              isProcessing={isProcessing}
+                              onExtract={async (reg, fmt) => {
+                                if (!pdfId || isProcessing) return;
+                                setIsProcessing(true);
+                                setError(null);
+                                try {
+                                  const regions = [{
+                                    x: reg.bbox.x,
+                                    y: reg.bbox.y,
+                                    width: reg.bbox.w,
+                                    height: reg.bbox.h,
+                                    page: reg.page,
+                                    label: reg.region_type,
+                                  }];
+                                  const extractionRequest = {
+                                    pdf_id: pdfId,
+                                    regions,
+                                    output_format: fmt,
+                                  };
+                                  const job = await apiClient.createExtractionJob(extractionRequest);
+                                  setJob(job);
+                                } catch (err) {
+                                  setError(
+                                    `Extraction failed: ${
+                                      err instanceof Error ? err.message : "Unknown error"
+                                    }`
+                                  );
+                                } finally {
+                                  setIsProcessing(false);
+                                }
+                              }}
+                            />
+                          ))}
                         </div>
                       );
                     })()}
                   </div>
-                </div>
-
-              {/* Export Settings */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-lg">
-                <div className="px-4 py-3 border-b border-slate-800">
-                  <h3 className="text-sm font-semibold text-slate-200">
-                    Export Settings
-                  </h3>
-                </div>
-                <div className="p-4 space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-2">
-                      Output Format
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["csv", "tsv", "json"] as const).map((format) => (
-                        <button
-                          key={format}
-                          onClick={() => setOutputFormat(format)}
-                          className={`px-3 py-2 text-xs font-medium rounded-md border transition ${
-                            outputFormat === format
-                              ? "border-blue-500 bg-blue-500/10 text-blue-400"
-                              : "border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-300"
-                          }`}
-                        >
-                          {format.toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <button
-                      onClick={handleSaveDocument}
-                      disabled={
-                        detectedRegions.length === 0 ||
-                        isSaving ||
-                        !pdfId ||
-                        !job?.job_id
-                      }
-                      className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium text-sm disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="animate-spin" size={16} />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Database size={16} />
-                          Save Document
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={handleExtract}
-                      disabled={
-                        detectedRegions.length === 0 ||
-                        isProcessing ||
-                        !pdfId
-                      }
-                      className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg font-medium text-sm disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition shadow-lg shadow-blue-500/20 disabled:shadow-none flex items-center justify-center gap-2"
-                    >
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="animate-spin" size={16} />
-                          Starting...
-                        </>
-                      ) : (
-                        <>
-                          <Play size={16} />
-                          Extract Data
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
+                </Card>
 
               {/* Job Status */}
               {job && (
-                <div className="bg-slate-900/50 border border-slate-800 rounded-lg">
-                  <div className="px-4 py-3 border-b border-slate-800">
-                    <h3 className="text-sm font-semibold text-slate-200">
-                      Processing Status
-                    </h3>
-                  </div>
-                  <div className="p-4">
-                    {/* PENDING STATE */}
+                <Card>
+                  <CardHeader title="Processing Status" />
+                  <CardContent>
                     {job.status === "pending" && (
-                      <div className="flex items-center gap-3">
-                        <Loader2
-                          className="text-blue-500 animate-spin"
-                          size={20}
-                        />
-                        <span className="text-sm text-slate-300">
-                          Queued...
-                        </span>
-                      </div>
+                      <StatusIndicator status="pending" />
                     )}
 
                     {job.status === "processing" && (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <Loader2
-                            className="text-blue-500 animate-spin"
-                            size={20}
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm text-slate-300">
-                              Extracting regions...
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                                  style={{ width: `${job.progress || 0}%` }}
-                                />
-                              </div>
-                              <span className="text-xs text-slate-400 tabular-nums">
-                                {Math.round(job.progress || 0)}%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <StatusIndicator 
+                        status="processing" 
+                        message="Extracting regions..." 
+                        progress={job.progress}
+                      />
                     )}
 
                     {/* COMPLETED STATE */}
@@ -705,78 +563,75 @@ export default function Home() {
                       <div className="space-y-3">
                         {/* Final stats */}
                         <div className="grid grid-cols-3 gap-2">
-                          <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                          <Card variant="strong" className="p-3">
                             <div className="flex items-center gap-2 mb-1">
-                              <Eye
-                                className="text-emerald-400"
-                                size={14}
-                              />
-                              <p className="text-xs text-slate-400">
-                                Detected
-                              </p>
+                              <Sparkles className={theme.colors.accent.emerald} size={14} />
+                              <p className={cn('text-xs', theme.colors.text.muted)}>Detected</p>
                             </div>
                             <p className="text-lg font-semibold text-emerald-400 tabular-nums">
                               {job.detected_entities}
                             </p>
-                          </div>
-                          <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                          </Card>
+                          <Card variant="strong" className="p-3">
                             <div className="flex items-center gap-2 mb-1">
-                              <Database
-                                className="text-blue-400"
-                                size={14}
-                              />
-                              <p className="text-xs text-slate-400">
-                                Fields
-                              </p>
+                              <Database className={theme.colors.accent.blue} size={14} />
+                              <p className={cn('text-xs', theme.colors.text.muted)}>Fields</p>
                             </div>
                             <p className="text-lg font-semibold text-blue-400 tabular-nums">
-                              {Math.floor(
-                                (job.detected_entities || 0) * 1.5
-                              )}
+                              {Math.floor((job.detected_entities || 0) * 1.5)}
                             </p>
-                          </div>
-                          <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                          </Card>
+                          <Card variant="strong" className="p-3">
                             <div className="flex items-center gap-2 mb-1">
-                              <Check
-                                className="text-emerald-400"
-                                size={14}
-                              />
-                              <p className="text-xs text-slate-400">
-                                Status
-                              </p>
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                <circle cx="7" cy="7" r="6" className="stroke-emerald-400" strokeWidth="2" />
+                                <path d="M4 7l2 2 4-4" className="stroke-emerald-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              <p className={cn('text-xs', theme.colors.text.muted)}>Status</p>
                             </div>
-                            <p className="text-lg font-semibold text-emerald-400">
-                              Done
-                            </p>
-                          </div>
+                            <p className="text-lg font-semibold text-emerald-400">Done</p>
+                          </Card>
                         </div>
 
-                        {/* Completion steps */}
-                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-3 space-y-2">
+                        <Card variant="overlay" className="p-3 space-y-2">
                           {[
                             { label: "Document Analysis" },
                             { label: "AI Detection" },
                             { label: "Data Extraction" },
                             { label: "Validation" },
                           ].map((step, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-2"
-                            >
-                              <div className="w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
-                                <Check size={10} className="text-white" />
+                            <div key={idx} className="flex items-center gap-2">
+                              <div className={cn(
+                                'w-4 h-4',
+                                theme.colors.accent.emeraldBg,
+                                theme.radius.full,
+                                'flex items-center justify-center'
+                              )}>
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                  <path d="M2 5l2 2 4-4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
                               </div>
-                              <p className="text-xs text-slate-300">
+                              <p className={cn('text-xs', theme.colors.text.tertiary)}>
                                 {step.label}
                               </p>
                             </div>
                           ))}
-                        </div>
+                        </Card>
 
-                        {/* Success message */}
-                        <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                          <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
-                            <Check className="text-white" size={16} />
+                        <div className={cn(
+                          'flex items-center gap-3 p-3',
+                          'bg-emerald-500/10 border border-emerald-500/30',
+                          theme.radius.lg
+                        )}>
+                          <div className={cn(
+                            'w-8 h-8',
+                            theme.colors.accent.emeraldBg,
+                            theme.radius.full,
+                            'flex items-center justify-center'
+                          )}>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                              <path d="M4 8l3 3 5-6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
                           </div>
                           <div>
                             <p className="text-sm font-medium text-emerald-400">
@@ -788,33 +643,36 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Debug Graph Link */}
                         {job.debug_graph_url && (
-                          <a
-                            href={job.debug_graph_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-600 hover:border-blue-500 rounded-lg text-xs text-slate-300 hover:text-blue-400 transition"
+                          <Button
+                            variant="ghost"
+                            size="md"
+                            onClick={() => window.open(job.debug_graph_url, '_blank')}
+                            icon={<Sparkles size={14} />}
+                            className="w-full"
                           >
-                            <Eye size={14} />
                             View Processing Trace
-                          </a>
+                          </Button>
                         )}
 
-                        {/* Download button */}
-                        <button
+                        <Button
+                          variant="success"
+                          size="lg"
                           onClick={handleDownload}
-                          className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                          icon={<Download size={16} />}
+                          className="w-full"
                         >
-                          <Download size={16} />
                           Download {outputFormat.toUpperCase()}
-                        </button>
+                        </Button>
                       </div>
                     )}
 
-                    {/* FAILED STATE */}
                     {job.status === "failed" && (
-                      <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <div className={cn(
+                        'p-3',
+                        'bg-red-500/10 border border-red-500/30',
+                        theme.radius.lg
+                      )}>
                         <div className="flex items-center gap-2 mb-1">
                           <AlertCircle className="text-red-400" size={16} />
                           <p className="text-sm font-medium text-red-400">
@@ -826,8 +684,8 @@ export default function Home() {
                         )}
                       </div>
                     )}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               )}
             </div>
           </div>
