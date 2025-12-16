@@ -34,9 +34,9 @@ interface RegionCorrection {
 
 interface PDFViewerProps {
   file: File | null;
-  regions: Region[];
   onRegionAdd: (region: Region) => void;
-  onRegionRemove: (index: number) => void;
+  onRegionRemove: (regionId: string) => void;
+  onRegionUpdate?: (region: DetectedRegion) => void;
   currentPage: number;
   onPageChange: (page: number) => void;
   detectedRegions?: DetectedRegion[];
@@ -52,8 +52,9 @@ interface PDFViewerProps {
 
 export default function PDFViewer({
   file,
-  regions,
   onRegionAdd,
+  onRegionRemove,
+  onRegionUpdate,
   currentPage,
   onPageChange,
   detectedRegions = [],
@@ -387,6 +388,11 @@ export default function PDFViewer({
     setEditedRegions(editedRegions.filter(r => r.region_id !== regionId));
     setSelectedRegion(null);
     
+    // Call parent handler
+    if (onRegionRemove) {
+      onRegionRemove(regionId);
+    }
+    
     if (onRegionCorrection) {
       onRegionCorrection(correction);
     }
@@ -406,6 +412,11 @@ export default function PDFViewer({
       setCorrections([...corrections, correction]);
       setEditedRegions(editedRegions.filter(r => r.region_id !== regionId));
       setSelectedRegion(null);
+      
+      // Call parent handlers
+      if (onRegionRemove) {
+        onRegionRemove(regionId);
+      }
       if (onRegionCorrection) {
         onRegionCorrection(correction);
       }
@@ -424,6 +435,10 @@ export default function PDFViewer({
     setCorrections([...corrections, correction]);
     setEditedRegions(editedRegions.map(r => r.region_id === regionId ? corrected : r));
     
+    // Call parent handler to sync state
+    if (onRegionUpdate) {
+      onRegionUpdate(corrected);
+    }
     if (onRegionCorrection) {
       onRegionCorrection(correction);
     }
@@ -599,25 +614,6 @@ export default function PDFViewer({
         ctx.lineTo(deleteX - 4, deleteY + 4);
         ctx.stroke();
       }
-    });
-
-    // Draw existing manual regions for current page
-    const pageRegions = regions.filter((r) => r.page === currentPage);
-    pageRegions.forEach((region, index) => {
-      const canvasX = region.x * canvas.width;
-      const canvasY = region.y * canvas.height;
-      const canvasWidth = region.width * canvas.width;
-      const canvasHeight = region.height * canvas.height;
-
-      ctx.strokeStyle = "#3b82f6";
-      ctx.fillStyle = "rgba(59, 130, 246, 0.2)";
-      ctx.lineWidth = 2;
-      ctx.fillRect(canvasX, canvasY, canvasWidth, canvasHeight);
-      ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
-
-      ctx.fillStyle = "#3b82f6";
-      ctx.font = "bold 16px Arial";
-      ctx.fillText(`#${index + 1}`, canvasX + 5, canvasY + 20);
     });
 
     // Draw current drawing rectangle

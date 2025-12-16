@@ -37,17 +37,17 @@ const PDFViewer = dynamic(() => import("@/components/PDFViewer"), {
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [pdfId, setPdfId] = useState<string | null>(null);
-  const [regions, setRegions] = useState<Region[]>([]);
+  const [detectedRegions, setDetectedRegions] = useState<DetectedRegion[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [outputFormat, setOutputFormat] = useState<"csv" | "tsv" | "json">(
     "csv"
   );
   const [job, setJob] = useState<JobStatus | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [detectedRegions, setDetectedRegions] = useState<DetectedRegion[]>([]);
   const [approvedRegions, setApprovedRegions] = useState<DetectedRegion[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Poll job status
@@ -80,7 +80,8 @@ export default function Home() {
     }
 
     setFile(selectedFile);
-    setRegions([]);
+    setDetectedRegions([]);
+    setApprovedRegions([]);
     setJob(null);
     setError(null);
 
@@ -175,23 +176,94 @@ export default function Home() {
   };
 
   const handleRegionAdd = (region: Region) => {
-    setRegions([...regions, region]);
+    // Convert manual region to DetectedRegion
+    const newRegion: DetectedRegion = {
+      region_id: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      region_type: "TABLE", // Default to TABLE, user can change
+      bbox: {
+        x: region.x,
+        y: region.y,
+        w: region.width,
+        h: region.height,
+      },
+      page: region.page,
+      confidence: 1.0,
+    };
+    setDetectedRegions([...detectedRegions, newRegion]);
   };
 
-  const handleRegionRemove = (index: number) => {
-    setRegions(regions.filter((_, i) => i !== index));
+  const handleRegionRemove = (regionId: string) => {
+    setDetectedRegions(detectedRegions.filter((r) => r.region_id !== regionId));
+  };
+
+  const handleRegionUpdate = (updatedRegion: DetectedRegion) => {
+    setDetectedRegions(
+      detectedRegions.map((r) =>
+        r.region_id === updatedRegion.region_id ? updatedRegion : r
+      )
+    );
   };
 
 
+
+  const handleSaveDocument = async () => {
+    if (!pdfId || !job?.job_id) {
+      setError("No document to save");
+      return;
+    }
+    if (detectedRegions.length === 0) {
+      setError("No regions to save");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Format regions as corrections for reinforcement learning
+      const corrections = detectedRegions.map((region) => ({
+        original: region,
+        corrected: region, // In save mode, corrected = current state
+        action: "retype", // Mark as user-verified
+        timestamp: new Date().toISOString(),
+      }));
+
+      await apiClient.submitFeedback(
+        job.job_id,
+        corrections,
+        undefined, // userId
+        undefined  // sessionId
+      );
+
+      setError("Document saved successfully!");
+      setTimeout(() => setError(null), 3000);
+    } catch (err) {
+      setError(
+        `Save failed: ${err instanceof Error ? err.message : "Unknown error"}`
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleExtract = async () => {
     if (!pdfId) return;
-    if (regions.length === 0) return;
+    if (detectedRegions.length === 0) return;
 
     setIsProcessing(true);
     setError(null);
 
     try {
+      // Convert DetectedRegions back to Region format for extraction
+      const regions: Region[] = detectedRegions.map((r) => ({
+        x: r.bbox.x,
+        y: r.bbox.y,
+        width: r.bbox.w,
+        height: r.bbox.h,
+        page: r.page,
+        label: r.region_type,
+      }));
+
       const extractionRequest = {
         pdf_id: pdfId,
         regions,
@@ -266,7 +338,8 @@ export default function Home() {
                   onClick={() => {
                     setFile(null);
                     setPdfId(null);
-                    setRegions([]);
+                    setDetectedRegions([]);
+                    setApprovedRegions([]);
                     setJob(null);
                   }}
                   className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
@@ -376,13 +449,13 @@ export default function Home() {
             <div className="flex-[2] bg-slate-900 border border-slate-800 rounded-lg overflow-hidden min-w-0">
               <PDFViewer
                 file={file}
-                regions={regions}
                 onRegionAdd={handleRegionAdd}
-                onRegionRemove={handleRegionRemove}
                 currentPage={currentPage}
                 onPageChange={setCurrentPage}
                 detectedRegions={detectedRegions}
                 approvedRegions={approvedRegions}
+                onRegionUpdate={handleRegionUpdate}
+                onRegionRemove={handleRegionRemove}
               />
             </div>
 
@@ -529,27 +602,52 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={handleExtract}
-                    disabled={
-                      regions.length === 0 ||
-                      isProcessing ||
-                      !pdfId
-                    }
-                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg font-medium text-sm disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition shadow-lg shadow-blue-500/20 disabled:shadow-none flex items-center justify-center gap-2"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="animate-spin" size={16} />
-                        Starting...
-                      </>
-                    ) : (
-                      <>
-                        <Play size={16} />
-                        Extract Data
-                      </>
-                    )}
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      onClick={handleSaveDocument}
+                      disabled={
+                        detectedRegions.length === 0 ||
+                        isSaving ||
+                        !pdfId ||
+                        !job?.job_id
+                      }
+                      className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium text-sm disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                    >
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Database size={16} />
+                          Save Document
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleExtract}
+                      disabled={
+                        detectedRegions.length === 0 ||
+                        isProcessing ||
+                        !pdfId
+                      }
+                      className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg font-medium text-sm disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition shadow-lg shadow-blue-500/20 disabled:shadow-none flex items-center justify-center gap-2"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} />
+                          Starting...
+                        </>
+                      ) : (
+                        <>
+                          <Play size={16} />
+                          Extract Data
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
