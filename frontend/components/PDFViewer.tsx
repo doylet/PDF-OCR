@@ -40,6 +40,7 @@ interface PDFViewerProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   detectedRegions?: DetectedRegion[];
+  approvedRegions?: DetectedRegion[];
   onRegionCorrection?: (correction: RegionCorrection) => void;
   jobId?: string;
   onRegionsSelectedForExtraction?: (regionIds: string[]) => void;
@@ -56,6 +57,7 @@ export default function PDFViewer({
   currentPage,
   onPageChange,
   detectedRegions = [],
+  approvedRegions = [],
   onRegionCorrection,
   onRegionsSelectedForExtraction,
   onRegionSelected,
@@ -450,6 +452,31 @@ export default function PDFViewer({
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw approved regions (structure gate output) with distinct dotted style
+    const pageApprovedRegions = approvedRegions.filter(
+      (r) => r.page === currentPage
+    );
+    pageApprovedRegions.forEach((region) => {
+      const canvasX = region.bbox.x * canvas.width;
+      const canvasY = region.bbox.y * canvas.height;
+      const canvasWidth = region.bbox.w * canvas.width;
+      const canvasHeight = region.bbox.h * canvas.height;
+
+      // Dotted green border to distinguish approved regions
+      ctx.strokeStyle = "#10b981";
+      ctx.fillStyle = "rgba(16, 185, 129, 0.08)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 4]);
+      ctx.fillRect(canvasX, canvasY, canvasWidth, canvasHeight);
+      ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+      ctx.setLineDash([]);
+
+      // Label: "APPROVED"
+      ctx.fillStyle = "#10b981";
+      ctx.font = "bold 10px Arial";
+      ctx.fillText("APPROVED", canvasX + 5, canvasY + 12);
+    });
 
     // Draw detected regions (agentic) for current page
     const pageEditedRegions = editedRegions.filter(

@@ -2,20 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { Region, JobStatus } from "@/types/api";
-
-interface DetectedRegion {
-  region_id: string;
-  region_type: string;
-  bbox: {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  };
-  page: number;
-  confidence: number;
-}
+import { Region, JobStatus, DetectedRegion } from "@/types/api";
 import { apiClient } from "@/lib/api-client";
 
 import {
@@ -58,6 +45,7 @@ export default function Home() {
   const [job, setJob] = useState<JobStatus | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectedRegions, setDetectedRegions] = useState<DetectedRegion[]>([]);
+  const [approvedRegions, setApprovedRegions] = useState<DetectedRegion[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +58,10 @@ export default function Home() {
       try {
         const updatedJob = await apiClient.getJobStatus(job.job_id);
         setJob(updatedJob);
+        // Update approved regions when job completes
+        if (updatedJob.status === "completed" && updatedJob.approved_regions) {
+          setApprovedRegions(updatedJob.approved_regions);
+        }
       } catch (err) {
         console.error("Error polling job status:", err);
       }
@@ -390,6 +382,7 @@ export default function Home() {
                 currentPage={currentPage}
                 onPageChange={setCurrentPage}
                 detectedRegions={detectedRegions}
+                approvedRegions={approvedRegions}
               />
             </div>
 

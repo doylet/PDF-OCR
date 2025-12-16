@@ -220,6 +220,9 @@ class ExpertOrchestrator:
         # Apply structure gate to filter out non-extractable regions
         approved_regions = StructureGate.filter_regions(self.graph, page_num)
         
+        # HARD LOG: Show proposed/approved counts
+        logger.info(f"Page {page_num}: {len(page_regions_proposed)} proposed → {len(approved_regions)} approved (rejection: {round(1 - len(approved_regions) / max(len(page_regions_proposed), 1), 2)})")
+        
         self.graph.trace.append({
             "step": "structure_gate",
             "status": "completed",
@@ -618,25 +621,29 @@ class ExpertOrchestrator:
         """
         Determine overall job outcome based on regions and extractions.
         
-        Critical rule: If regions_proposed == 0 → NO_MATCH, not SUCCESS
+        Critical rule: If regions_approved == 0 → NO_MATCH (structure gate rejected everything)
         """
         from app.models.document_graph import JobOutcome
         
         regions_proposed = len(self.graph.regions)
+        # Count approved regions from trace
+        regions_approved = sum(t.get("regions_approved", 0) for t in self.graph.trace if t.get("step") == "structure_gate")
         extractions_count = len(self.graph.extractions)
         passed = [e for e in self.graph.extractions if e.validation_status.name == "PASS"]
         failed = [e for e in self.graph.extractions if e.validation_status.name == "FAIL"]
         
-        logger.info(f"Determining outcome: {regions_proposed} regions, {extractions_count} extractions, {len(passed)} passed")
+        # HARD LOG: Outcome determination inputs
+        logger.info(f"Determining outcome: {regions_proposed} proposed, {regions_approved} approved, {extractions_count} extractions, {len(passed)} passed")
         
-        if regions_proposed == 0:
+        if regions_approved == 0:
             # Agent ran but found nothing
             self.graph.outcome = JobOutcome.NO_MATCH
             self.graph.trace.append({
                 "step": "determine_outcome",
                 "status": "no_match",
-                "reason": "No extractable regions detected",
-                "regions_proposed": 0,
+                "reason": "Structure gate rejected all proposed regions",
+                "regions_proposed": regions_proposed,
+                "regions_approved": 0,
                 "timestamp": datetime.now().isoformat()
             })
         elif len(passed) == 0:
@@ -647,6 +654,7 @@ class ExpertOrchestrator:
                 "status": "no_match",
                 "reason": "Extractions failed validation",
                 "regions_proposed": regions_proposed,
+                "regions_approved": regions_approved,
                 "extractions_attempted": extractions_count,
                 "timestamp": datetime.now().isoformat()
             })

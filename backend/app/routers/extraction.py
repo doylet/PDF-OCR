@@ -225,9 +225,24 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
         graph_json = json.dumps(graph_dict, indent=2, default=str)
         debug_graph_url = storage_service.upload_result(job_id, graph_json, "json", suffix="_graph")
         
+        # Extract approved regions for frontend overlay
+        approved_regions = []
+        for region in graph.regions:
+            approved_regions.append({
+                "region_id": region.region_id,
+                "page": region.page,
+                "bbox": {"x": region.bbox.x, "y": region.bbox.y, "w": region.bbox.w, "h": region.bbox.h},
+                "region_type": region.region_type.value,
+                "confidence": region.confidence
+            })
+        
+        # HARD LOG: Extraction complete
+        regions_approved = sum(t.get("regions_approved", 0) for t in graph.trace if t.get("step") == "structure_gate")
+        logger.info(f"Job {job_id} complete: {len(graph.regions)} proposed, {regions_approved} approved, {len(results)} extracted")
+        
         # Status message based on outcome
         if outcome == "no_match":
-            status_msg = f"No extractable data found ({len(graph.regions)} regions detected)"
+            status_msg = f"No extractable data found ({regions_approved} of {len(graph.regions)} regions approved)"
         elif outcome == "partial_success":
             status_msg = f"Partial extraction: {len(results)} of {len(graph.extractions)} succeeded"
         else:
@@ -238,7 +253,8 @@ async def process_agentic_extraction(job_id: str, request: ExtractionRequest):
             "completed", 
             result_url=result_url,
             error_message=status_msg if outcome == "no_match" else None,
-            debug_graph_url=debug_graph_url
+            debug_graph_url=debug_graph_url,
+            approved_regions=approved_regions
         )
         
         logger.info(f"Completed agentic extraction job: {job_id}, outcome: {outcome}")

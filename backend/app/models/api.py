@@ -20,6 +20,15 @@ class ExtractionRequest(BaseModel):
     output_format: Literal["csv", "tsv", "json"] = Field(default="csv", description="Output format")
 
 
+class DetectedRegion(BaseModel):
+    """Region detected by structure gate"""
+    region_id: str
+    page: int
+    bbox: dict
+    region_type: str
+    confidence: float
+
+
 class JobStatus(BaseModel):
     """Status of an extraction job"""
     job_id: str
@@ -31,6 +40,7 @@ class JobStatus(BaseModel):
     result_url: Optional[str] = None
     error_message: Optional[str] = None
     debug_graph_url: Optional[str] = None
+    approved_regions: Optional[List[DetectedRegion]] = None
 
 
 class ExtractionResult(BaseModel):
