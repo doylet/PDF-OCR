@@ -234,6 +234,12 @@ class ExpertOrchestrator:
             "region_id": region.region_id,
             "region_type": region.region_type.value,
             "page": region.page,
+            "bbox": {
+                "x": region.bbox.x,
+                "y": region.bbox.y,
+                "w": region.bbox.w,
+                "h": region.bbox.h
+            } if region.bbox else None,
             "timestamp": datetime.now().isoformat()
         })
         

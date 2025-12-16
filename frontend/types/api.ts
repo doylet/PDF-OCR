@@ -29,6 +29,7 @@ export interface JobStatus {
   error_message?: string;
   debug_graph_url?: string;
   result_url?: string;
+  error?: string;
   progress?: number;
   detected_entities?: number;  // Add this
   processing_step?: string;     // Add this

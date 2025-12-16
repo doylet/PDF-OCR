@@ -53,10 +53,42 @@ class TableAgent:
         
         logger.info(f"Found {len(tokens)} tokens in {region.region_id}")
         
+        # Sample tokens for debugging
+        sample_tokens = [f"{t.text}@({t.bbox.x:.3f},{t.bbox.y:.3f})" for t in tokens[:5]]
+        logger.info(f"Sample tokens: {sample_tokens}")
+        
         # Step 1: Cluster tokens into columns (vertical alignment)
         columns = TableAgent._cluster_columns(tokens)
         
         if len(columns) < 2:
+            # Try with more lenient tolerance for single-column tables or narrow regions
+            logger.info(f"Only {len(columns)} columns with X_TOLERANCE={TableAgent.X_TOLERANCE}, trying lenient mode")
+            
+            # If we have at least a few tokens, try to extract as simple list
+            if len(tokens) >= 3:
+                # Fallback: treat as single column, group into rows
+                rows = TableAgent._group_rows(tokens, [[t] for t in tokens])
+                if len(rows) >= 2:
+                    table_data = [[t.text for t in row] for row in rows]
+                    logger.info(f"Extracted {len(rows)} rows as single-column table")
+                    
+                    extraction = Extraction(
+                        extraction_id=f"ext_{region.region_id}",
+                        region_id=region.region_id,
+                        data={
+                            "rows": table_data,
+                            "columns": ["col_0"],
+                            "num_rows": len(table_data),
+                            "num_cols": 1
+                        },
+                        schema=None,
+                        confidence=0.6,  # Lower confidence for single-column
+                        validation_status=ValidationStatus.PENDING,
+                        extracted_by="table_agent",
+                        method=ExtractionMethod.AGENT_INFERRED
+                    )
+                    return extraction
+            
             logger.warning(f"Found only {len(columns)} columns, need at least 2 (tokens={len(tokens)})")
             return None
         

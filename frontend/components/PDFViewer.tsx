@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Region } from "@/types/api";
+import { FileText, Brain } from "lucide-react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -30,20 +31,17 @@ interface PDFViewerProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   detectedRegions?: DetectedRegion[];
-  onRegionsDetected?: (regions: DetectedRegion[]) => void;
 }
+
+
 
 export default function PDFViewer({
   file,
   regions,
   onRegionAdd,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onRegionRemove,
   currentPage,
   onPageChange,
   detectedRegions = [],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onRegionsDetected,
 }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -53,12 +51,27 @@ export default function PDFViewer({
   const [currentRect, setCurrentRect] = useState<Region | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1.0);
   const [pageDimensions, setPageDimensions] = useState<{
     width: number;
     height: number;
   } | null>(null);
+  const [scale, setScale] = useState<number>(1.0);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  // Create a stable blob URL from the file
+  useEffect(() => {
+    if (!file) {
+      setBlobUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    setBlobUrl(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -71,9 +84,21 @@ export default function PDFViewer({
       height: number;
     };
   }) {
-    // Get the base PDF page dimensions (at scale 1.0) in PDF points (72 DPI)
-    // We'll use the actual rendered canvas size for coordinate conversion
     const viewport = page.getViewport({ scale: 1.0 });
+    const container = containerRef.current;
+    
+    if (container) {
+      // Calculate scale to fit container (max 2/3 of screen width)
+      const containerWidth = container.clientWidth - 48; // Account for padding
+      const containerHeight = container.clientHeight - 48;
+      
+      const scaleWidth = containerWidth / viewport.width;
+      const scaleHeight = containerHeight / viewport.height;
+      const optimalScale = Math.min(scaleWidth, scaleHeight, 2.0); // Cap at 2x
+      
+      setScale(optimalScale);
+    }
+    
     setPageDimensions({
       width: viewport.width,
       height: viewport.height,
@@ -229,91 +254,162 @@ export default function PDFViewer({
     }
   }, [regions, detectedRegions, currentRect, currentPage, pageDimensions]);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= numPages) {
-      onPageChange(newPage);
-    }
-  };
+  if (!file) {
+    return (
+      <div className="flex-1 bg-slate-900 rounded-lg border border-slate-700 p-8">
+        <div className="text-center text-slate-400">
+          <FileText className="mx-auto mb-4" size={64} />
+          <p>No PDF loaded</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-slate-900 min-h-[700px] relative">
-      <div className="flex flex-col items-center space-y-4">
-        {file && (
-          <>
-            <div className="flex items-center space-x-4 mb-4">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage <= 1}
-                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <span className="text-sm">
-                Page {currentPage} of {numPages}
-              </span>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage >= numPages}
-                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setScale(Math.max(0.5, scale - 0.1))}
-                  className="px-3 py-1 bg-gray-200 rounded"
-                >
-                  -
-                </button>
-                <span className="text-sm">{Math.round(scale * 100)}%</span>
-                <button
-                  onClick={() => setScale(Math.min(2.0, scale + 0.1))}
-                  className="px-3 py-1 bg-gray-200 rounded"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            <div
-              ref={containerRef}
-              className="relative border-2 border-gray-300 rounded shadow-lg"
+    <div className="flex gap-3 h-full">
+      {/* Thumbnail Strip */}
+      <div
+        className="w-24 bg-slate-900/50 border border-slate-700 rounded-lg p-2 overflow-y-auto"
+        style={{ maxHeight: "700px" }}
+      >
+        <div className="space-y-2">
+          {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
+            <button
+              key={pageNum}
+              onClick={() => onPageChange(pageNum)}
+              className={`w-full aspect-[8.5/11] rounded border-2 transition-all relative group overflow-hidden ${
+                currentPage === pageNum
+                  ? "border-blue-500 bg-blue-500/10"
+                  : "border-slate-600 hover:border-slate-500 bg-slate-800/50"
+              }`}
             >
-              <Document file={file} onLoadSuccess={onDocumentLoadSuccess}>
-                <Page
-                  pageNumber={currentPage}
-                  scale={scale}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                  onLoadSuccess={onPageLoadSuccess}
-                  inputRef={pageRef}
-                />
-              </Document>
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-800 overflow-hidden">
+                {blobUrl && numPages > 0 ? (
+                  <Document file={blobUrl} key={`thumb-${pageNum}`}>
+                    <Page
+                      pageNumber={pageNum}
+                      width={68}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                      className="pointer-events-none"
+                    />
+                  </Document>
+                ) : (
+                  <FileText
+                    className={`${
+                      currentPage === pageNum ? "text-blue-400" : "text-slate-600"
+                    }`}
+                    size={20}
+                  />
+                )}
+              </div>
+              <div
+                className={`absolute bottom-1 left-0 right-0 text-center text-[10px] font-medium bg-slate-900/80 backdrop-blur-sm py-0.5 z-10 ${
+                  currentPage === pageNum ? "text-blue-400" : "text-slate-300"
+                }`}
+              >
+                {pageNum}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main PDF Viewer */}
+      <div
+        className="flex-1 bg-slate-900 rounded-lg border border-slate-700 relative overflow-hidden"
+        style={{ minHeight: "700px" }}
+      >
+        <div
+          ref={containerRef}
+          className="absolute inset-0 overflow-auto flex items-center justify-center"
+        >
+          <div className="relative">
+            <Document
+              file={blobUrl}
+              onLoadSuccess={onDocumentLoadSuccess}
+              className="flex justify-center"
+            >
+              <Page
+                pageNumber={currentPage}
+                onLoadSuccess={onPageLoadSuccess}
+                scale={scale}
+                renderTextLayer={true}
+                renderAnnotationLayer={true}
+                className="shadow-lg"
+              />
+            </Document>
+            {pageDimensions && (
               <canvas
                 ref={canvasRef}
-                className="absolute top-0 left-0 cursor-crosshair"
-                style={{
-                  width: pageDimensions
-                    ? `${pageDimensions.width * scale}px`
-                    : "800px",
-                  height: pageDimensions
-                    ? `${pageDimensions.height * scale}px`
-                    : "1035px",
-                }}
-                width={pageDimensions ? pageDimensions.width * scale : 800}
-                height={pageDimensions ? pageDimensions.height * scale : 1035}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                className="absolute top-0 left-0 cursor-crosshair"
+                style={{
+                  width: pageDimensions.width * scale,
+                  height: pageDimensions.height * scale,
+                  touchAction: 'none',
+                  zIndex: 10,
+                }}
+                width={pageDimensions.width * scale}
+                height={pageDimensions.height * scale}
               />
-            </div>
+            )}
+          </div>
+        </div>
 
-            <div className="text-sm text-gray-600">
-              Click and drag on the PDF to select regions for extraction
-            </div>
-          </>
+        {/* Overlay for regions */}
+        {regions.length > 0 && (
+          <div className="absolute top-4 left-4 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
+            <p className="text-xs text-slate-300">
+              {regions.length} region{regions.length !== 1 ? "s" : ""} selected
+            </p>
+          </div>
         )}
+
+        {/* Detected regions indicator */}
+        {detectedRegions.length > 0 && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-500/20 backdrop-blur-sm px-3 py-2 rounded-md border border-green-400/50 z-10">
+            <p className="text-xs text-green-300">
+              {detectedRegions.filter((r) => r.page === currentPage).length}{" "}
+              detected on page {currentPage}
+            </p>
+          </div>
+        )}
+
+        {/* Drawing hint */}
+        <div className="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
+          <p className="text-xs text-slate-300">Click & drag to draw regions</p>
+        </div>
+
+        {/* Integrated Page Navigation */}
+        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-10">
+          <button
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-2 bg-slate-800/90 backdrop-blur-sm border border-slate-600 rounded-lg text-slate-300 hover:text-white hover:border-slate-500 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            ← Previous
+          </button>
+
+          <div className="bg-slate-800/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-600">
+            <span className="text-slate-300 text-sm font-medium">
+              Page{" "}
+              <span className="text-white tabular-nums">{currentPage}</span> of{" "}
+              <span className="text-slate-400 tabular-nums">{numPages}</span>
+            </span>
+          </div>
+
+          <button
+            onClick={() => onPageChange(Math.min(numPages, currentPage + 1))}
+            disabled={currentPage === numPages}
+            className="px-3 py-2 bg-slate-800/90 backdrop-blur-sm border border-slate-600 rounded-lg text-slate-300 hover:text-white hover:border-slate-500 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            Next →
+          </button>
+        </div>
       </div>
     </div>
   );

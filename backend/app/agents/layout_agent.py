@@ -208,31 +208,45 @@ class LayoutAgent:
         headings = []
         
         for idx, line_tokens in enumerate(lines):
-            line_text = ' '.join(t.text for t in line_tokens).lower()
+            if not line_tokens:
+                continue
+                
+            line_text = ' '.join(t.text for t in line_tokens)
+            line_text_lower = line_text.lower()
             
-            # Check for heading patterns
+            # Exclude lines with data values (these are table rows, not headings)
+            has_data_values = any(t.token_type in [TokenType.NUMBER, TokenType.CURRENCY, 
+                                                    TokenType.DATA_VOLUME, TokenType.DATE,
+                                                    TokenType.TIME, TokenType.DURATION] 
+                                 for t in line_tokens)
+            
+            if has_data_values:
+                continue
+            
+            # Exclude single-word lines (too short to be meaningful headings)
+            if len(line_tokens) == 1 and len(line_text) < 8:
+                continue
+            
+            # Heading must match ONE of these strict criteria:
             is_heading = False
             
-            # Only mark as heading if it contains heading keywords AND isn't table-like
-            has_heading_keyword = any(keyword in line_text for keyword in LayoutAgent.HEADING_KEYWORDS)
-            has_numbers = any(t.token_type in [TokenType.NUMBER, TokenType.CURRENCY, 
-                                               TokenType.DATA_VOLUME, TokenType.DATE] 
-                             for t in line_tokens)
-            
-            # 1. Contains heading keywords but not numbers (excludes table rows)
-            if has_heading_keyword and not has_numbers:
+            # 1. Strong heading keyword match (specific section indicators)
+            strong_keywords = ['summary', 'total calls', 'total messages', 'total data', 
+                              'invoice', 'statement', 'billing details', 'charges',
+                              'mobile number', 'plan details', 'account summary']
+            if any(keyword in line_text_lower for keyword in strong_keywords):
                 is_heading = True
             
-            # 2. All caps (excluding short words) - only if no numbers
-            if len(line_text) > 10 and not has_numbers:
+            # 2. All caps AND substantive (not just noise)
+            elif len(line_text) > 10:
                 caps_ratio = sum(1 for c in line_text if c.isupper()) / len(line_text)
-                if caps_ratio > 0.7:
+                # Require very high caps ratio and no lowercase (strict)
+                if caps_ratio > 0.85 and len(line_tokens) >= 2:
                     is_heading = True
             
             if is_heading:
-                heading_text = ' '.join(t.text for t in line_tokens)
-                headings.append((idx, heading_text))
-                logger.info(f"Detected heading at line {idx}: '{heading_text}'")
+                headings.append((idx, line_text))
+                logger.info(f"Detected heading at line {idx}: '{line_text}'")
         
         return headings
     
