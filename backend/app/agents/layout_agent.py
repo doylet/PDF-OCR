@@ -7,7 +7,9 @@ Responsibilities:
 3. Detect headings and section boundaries
 4. Propose region candidates (tables, key-value blocks)
 
-This agent is deterministic and geometry-based, not LLM-heavy.
+LLM-Enhanced Features:
+- Ambiguous layout resolution: "Is this a table or just aligned text?"
+- Context-aware region classification
 """
 import re
 import logging
@@ -18,14 +20,27 @@ from app.models.document_graph import (
     DocumentGraph, Token, Region, BBox, 
     TokenType, RegionType, ExtractionMethod
 )
+from app.services.llm_service import LLMService, LLMRole
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class LayoutAgent:
     """
     Builds document structure from tokens using geometry and text patterns.
+    
+    Now truly agentic: Uses LLM to resolve ambiguous layout decisions.
     """
+    
+    def __init__(self, llm_service: Optional[LLMService] = None):
+        """
+        Args:
+            llm_service: Optional LLM service for ambiguous layout decisions
+        """
+        self.llm_service = llm_service or LLMService() if settings.enable_llm_agents else None
+        self.use_llm = settings.enable_llm_agents and self.llm_service is not None
     
     # Type inference patterns
     PATTERNS = {
@@ -342,17 +357,21 @@ class LayoutAgent:
         if token_id_map:
             token_ids = [token_id_map[id(t)] for t in all_tokens if id(t) in token_id_map]
         
+        # Calculate alignment score for confidence
+        alignment_score = LayoutAgent._calculate_alignment_score(table_lines)
+        base_confidence = min(0.9, 0.5 + (alignment_score * 0.4))
+        
         region = Region(
             region_id=f"table_p{page_num}_l{start_idx}",
             region_type=RegionType.TABLE,
             bbox=BBox(min_x, min_y, max_x - min_x, max_y - min_y),
             page=page_num,
             detected_by="layout_agent",
-            confidence=0.7,
-            hints={"lines": len(table_lines)},
+            confidence=base_confidence,
+            hints={"lines": len(table_lines), "alignment_score": alignment_score},
             token_ids=token_ids
         )
-        logger.info(f"Proposed table region with {len(table_lines)} lines, {len(token_ids)} tokens")
+        logger.info(f"Proposed table region with {len(table_lines)} lines, {len(token_ids)} tokens, conf={base_confidence:.2f}")
         return region
     
     @staticmethod
@@ -421,6 +440,130 @@ class LayoutAgent:
         table_regions = LayoutAgent.propose_table_regions(lines, page_num, token_id_map)
         for region in table_regions:
             graph.add_region(region)
+    
+    @staticmethod
+    def _calculate_alignment_score(table_lines: List[List[Token]]) -> float:
+        """
+        Calculate how well-aligned the columns are in a table.
+        
+        Returns:
+            Float 0-1, where 1 = perfectly aligned columns
+        """
+        if not table_lines or len(table_lines) < 2:
+            return 0.0
+        
+        # Get x positions of tokens in each line
+        x_positions_by_col = defaultdict(list)
+        
+        for line in table_lines:
+            for col_idx, token in enumerate(line):
+                x_positions_by_col[col_idx].append(token.bbox.x)
+        
+        # Calculate variance in x positions for each column
+        variances = []
+        for col_idx, x_positions in x_positions_by_col.items():
+            if len(x_positions) > 1:
+                mean_x = sum(x_positions) / len(x_positions)
+                variance = sum((x - mean_x) ** 2 for x in x_positions) / len(x_positions)
+                variances.append(variance)
+        
+        if not variances:
+            return 0.0
+        
+        # Lower variance = better alignment
+        avg_variance = sum(variances) / len(variances)
+        
+        # Convert to 0-1 scale (variance of 0.01 or less = perfect)
+        alignment_score = max(0.0, 1.0 - (avg_variance * 100))
+        
+        return alignment_score
+    
+    def enhance_regions_with_llm(self, regions: List[Region], page_tokens: List[Token]) -> List[Region]:
+        """
+        Use LLM to verify/reclassify ambiguous regions.
+        
+        For regions with low confidence (<0.7), ask LLM:
+        "Is this a table or just aligned text?"
+        
+        Args:
+            regions: List of proposed regions
+            page_tokens: All tokens on the page for context
+            
+        Returns:
+            Enhanced/reclassified regions
+        """
+        if not self.use_llm:
+            return regions
+        
+        enhanced_regions = []
+        
+        for region in regions:
+            # Only query LLM for borderline cases
+            if region.confidence >= 0.7:
+                enhanced_regions.append(region)
+                continue
+            
+            # Extract region text for LLM analysis
+            region_tokens = [
+                t for t in page_tokens
+                if self._token_in_region(t, region)
+            ]
+            
+            region_text = '\n'.join(' '.join(t.text for t in line) 
+                                   for line in self._group_tokens_into_lines(region_tokens))
+            
+            try:
+                llm_result = self.llm_service.analyze_layout_ambiguity(
+                    region_text=region_text,
+                    current_type=region.region_type,
+                    alignment_score=region.hints.get("alignment_score", 0.0)
+                )
+                
+                # Update region based on LLM decision
+                if llm_result.get("confidence", 0) > region.confidence:
+                    region.region_type = RegionType[llm_result["region_type"].upper()]
+                    region.confidence = llm_result["confidence"]
+                    region.hints["llm_reasoning"] = llm_result.get("reasoning", "")
+                    logger.info(f"LLM reclassified {region.region_id}: {llm_result['region_type']} (conf={llm_result['confidence']:.2f})")
+                
+            except Exception as e:
+                logger.error(f"LLM analysis failed for {region.region_id}: {e}")
+            
+            enhanced_regions.append(region)
+        
+        return enhanced_regions
+    
+    @staticmethod
+    def _token_in_region(token: Token, region: Region) -> bool:
+        """Check if token overlaps with region bbox"""
+        return (token.bbox.x >= region.bbox.x and 
+                token.bbox.x <= region.bbox.x + region.bbox.w and
+                token.bbox.y >= region.bbox.y and
+                token.bbox.y <= region.bbox.y + region.bbox.h)
+    
+    @staticmethod
+    def _group_tokens_into_lines(tokens: List[Token]) -> List[List[Token]]:
+        """Group tokens into lines by y position"""
+        if not tokens:
+            return []
+        
+        sorted_tokens = sorted(tokens, key=lambda t: (t.bbox.y, t.bbox.x))
+        lines = []
+        current_line = [sorted_tokens[0]]
+        current_y = sorted_tokens[0].bbox.y
+        
+        for token in sorted_tokens[1:]:
+            if abs(token.bbox.y - current_y) < 0.01:  # Same line
+                current_line.append(token)
+            else:
+                lines.append(current_line)
+                current_line = [token]
+                current_y = token.bbox.y
+        
+        if current_line:
+            lines.append(current_line)
+        
+        return lines
         
         logger.info(f"LayoutAgent completed page {page_num}: "
                    f"{len(tokens)} tokens, {len(lines)} lines, "

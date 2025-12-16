@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     cloud_tasks_location: str = "us-central1"
     worker_service_url: str = "https://placeholder.run.app"
     
+    # LLM Configuration (Google Gemini)
+    gemini_api_key: str = ""  # Optional - enables agentic features
+    enable_llm_agents: bool = True  # Use LLM for ambiguous decisions
+    
     # CORS - can be JSON array string or comma-separated string
     cors_origins: Union[list[str], str] = "http://localhost:3000,http://localhost:3001"
     

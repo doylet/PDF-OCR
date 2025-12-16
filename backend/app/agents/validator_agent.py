@@ -10,6 +10,11 @@ Responsibilities:
 6. Decide: accept / retry / escalate
 
 This agent is the quality gate before results are returned.
+
+LLM-Enhanced Features:
+- Semantic validation: "Does this data make sense?"
+- Context-aware checks: "Are dates reasonable for a telecom invoice?"
+- Pattern recognition: "This looks like a currency but failed parsing"
 """
 import re
 import logging
@@ -20,14 +25,18 @@ from app.models.document_graph import (
     DocumentGraph, Extraction, AgentDecision,
     ValidationStatus, TokenType
 )
+from app.services.llm_service import LLMService, LLMRole
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class ValidatorAgent:
     """
     Validates extractions and decides next actions.
-    No "magic" - uses deterministic checks on structured data.
+    
+    Now truly agentic: Uses LLM for semantic validation alongside rule-based checks.
     """
     
     # Tolerances
@@ -35,10 +44,19 @@ class ValidatorAgent:
     MIN_TABLE_ROWS = 1
     MAX_TABLE_ROWS = 10000
     
-    @staticmethod
-    def validate_extraction(graph: DocumentGraph, extraction: Extraction) -> AgentDecision:
+    def __init__(self, llm_service: Optional[LLMService] = None):
+        """
+        Args:
+            llm_service: Optional LLM service for semantic validation
+        """
+        self.llm_service = llm_service or LLMService() if settings.enable_llm_agents else None
+        self.use_llm = settings.enable_llm_agents and self.llm_service is not None
+    
+    def validate_extraction(self, graph: DocumentGraph, extraction: Extraction) -> AgentDecision:
         """
         Main validation entry point.
+        
+        Combines rule-based checks with optional LLM semantic validation.
         
         Returns:
             AgentDecision indicating accept/retry/escalate
@@ -60,13 +78,22 @@ class ValidatorAgent:
                 explanation="Region not found in graph"
             )
         
-        # Dispatch to type-specific validators
+        # Phase 1: Rule-based validation
         if "rows" in extraction.data:  # Table
-            errors, warnings, confidence = ValidatorAgent._validate_table(extraction, graph)
+            errors, warnings, confidence = self._validate_table(extraction, graph)
         elif "pairs" in extraction.data:  # Key-value
-            errors, warnings, confidence = ValidatorAgent._validate_key_value(extraction)
+            errors, warnings, confidence = self._validate_key_value(extraction)
         elif "totals" in extraction.data:  # Totals
-            errors, warnings, confidence = ValidatorAgent._validate_totals(extraction)
+            errors, warnings, confidence = self._validate_totals(extraction)
+        
+        # Phase 2: LLM semantic validation (if enabled and no hard errors)
+        if self.use_llm and not errors:
+            llm_result = self._llm_semantic_validation(extraction, graph)
+            if not llm_result["is_valid"]:
+                # LLM found semantic issues
+                warnings.extend(llm_result.get("issues", []))
+                confidence = min(confidence, llm_result.get("confidence", 0.8))
+                logger.info(f"LLM validation raised concerns: {llm_result.get('issues', [])}")
         
         # Update extraction status
         extraction.validation_errors = errors + warnings
@@ -95,8 +122,46 @@ class ValidatorAgent:
             explanation="All validations passed"
         )
     
-    @staticmethod
-    def _validate_table(extraction: Extraction, graph: DocumentGraph) -> Tuple[List[str], List[str], float]:
+    def _llm_semantic_validation(self, extraction: Extraction, graph: DocumentGraph) -> Dict:
+        """
+        LLM-powered semantic validation.
+        
+        Checks:
+        - Do the dates make sense for this document type?
+        - Are amounts reasonable?
+        - Do patterns match expectations?
+        - Are there obvious data quality issues?
+        
+        Returns:
+            {
+                "is_valid": bool,
+                "confidence": float,
+                "issues": List[str],
+                "suggestions": List[str]
+            }
+        """
+        if not self.llm_service:
+            return {"is_valid": True, "confidence": 1.0, "issues": [], "suggestions": []}
+        
+        try:
+            result = self.llm_service.validate_extraction(
+                extraction_data=extraction.data,
+                region_type=extraction.region_type,
+                document_type=graph.metadata.get("document_type", "unknown"),
+                schema=extraction.schema
+            )
+            
+            logger.info(f"LLM validation for {extraction.extraction_id}: "
+                       f"valid={result['is_valid']}, conf={result['confidence']:.2f}, "
+                       f"issues={len(result.get('issues', []))}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"LLM semantic validation failed: {e}", exc_info=True)
+            return {"is_valid": True, "confidence": 1.0, "issues": [], "suggestions": []}
+    
+    def _validate_table(self, extraction: Extraction, graph: DocumentGraph) -> Tuple[List[str], List[str], float]:
         """
         Validate table extraction.
         
@@ -170,8 +235,7 @@ class ValidatorAgent:
         
         return errors, warnings, confidence
     
-    @staticmethod
-    def _validate_key_value(extraction: Extraction) -> Tuple[List[str], List[str], float]:
+    def _validate_key_value(self, extraction: Extraction) -> Tuple[List[str], List[str], float]:
         """
         Validate key-value extraction.
         
@@ -199,8 +263,7 @@ class ValidatorAgent:
         
         return errors, warnings, confidence
     
-    @staticmethod
-    def _validate_totals(extraction: Extraction) -> Tuple[List[str], List[str], float]:
+    def _validate_totals(self, extraction: Extraction) -> Tuple[List[str], List[str], float]:
         """
         Validate totals extraction.
         

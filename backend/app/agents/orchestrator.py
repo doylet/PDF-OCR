@@ -9,7 +9,9 @@ Responsibilities:
 5. If validation fails: controlled retries (pad crop, raise DPI, switch engine)
 6. Produce final structured output + audit trail
 
-This is mostly rules + simple scoring, not LLM-heavy.
+LLM-Enhanced Features:
+- Intelligent retry strategy selection based on failure diagnosis
+- Context-aware error recovery
 """
 import logging
 from typing import List, Dict, Optional, Tuple
@@ -20,8 +22,11 @@ from app.models.document_graph import (
     RegionType, ValidationStatus, ExtractionMethod, JobOutcome
 )
 from app.agents.layout_agent import LayoutAgent
+from app.services.llm_service import LLMService, LLMRole
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class ExpertOrchestrator:
@@ -33,13 +38,14 @@ class ExpertOrchestrator:
     # Retry limits
     MAX_RETRIES = 2
     
-    def __init__(self, pdf_path: str, job_id: str):
+    def __init__(self, pdf_path: str, job_id: str, llm_service: Optional[LLMService] = None):
         """
         Initialize orchestrator with a PDF.
         
         Args:
             pdf_path: Path to PDF file (local or GCS)
             job_id: Unique job identifier
+            llm_service: Optional LLM service for intelligent retry strategy
         """
         self.pdf_path = pdf_path
         self.job_id = job_id
@@ -47,6 +53,8 @@ class ExpertOrchestrator:
             job_id=job_id,
             pdf_path=pdf_path
         )
+        self.llm_service = llm_service or LLMService() if settings.enable_llm_agents else None
+        self.use_llm = settings.enable_llm_agents and self.llm_service is not None
         
         logger.info(f"ExpertOrchestrator initialized for job {job_id}")
     
@@ -504,9 +512,38 @@ class ExpertOrchestrator:
         """
         Decide how to retry a failed extraction.
         
+        Uses LLM to diagnose failure and recommend strategy if enabled.
+        Falls back to rule-based heuristics.
+        
         Returns:
             AgentDecision with action and parameters
         """
+        # Try LLM-powered diagnosis first
+        if self.use_llm:
+            diagnosis = self._llm_diagnose_failure(extraction)
+            if diagnosis and diagnosis.get("confidence", 0) > 0.6:
+                recommended_action = diagnosis.get("recommended_retry", {}).get("strategy")
+                
+                action_map = {
+                    "pad_crop": AgentDecision.Action.RETRY_PAD,
+                    "higher_dpi": AgentDecision.Action.RETRY_HIGHER_DPI,
+                    "force_ocr": AgentDecision.Action.RETRY_OCR,
+                    "escalate": AgentDecision.Action.ESCALATE
+                }
+                
+                action = action_map.get(recommended_action, AgentDecision.Action.RETRY_PAD)
+                
+                logger.info(f"LLM recommended retry strategy: {recommended_action} → {action.value}")
+                
+                return AgentDecision(
+                    action=action,
+                    confidence=diagnosis["confidence"],
+                    evidence=[extraction.extraction_id, diagnosis.get("diagnosis", "")],
+                    explanation=f"LLM diagnosis: {diagnosis.get('root_cause', 'unclear')}",
+                    next_params=diagnosis.get("recommended_retry", {}).get("params", {})
+                )
+        
+        # Fallback: Rule-based heuristics
         # Simple heuristic: if low confidence, try padding
         if extraction.confidence < 0.5:
             return AgentDecision(
@@ -534,6 +571,32 @@ class ExpertOrchestrator:
             evidence=[extraction.extraction_id],
             explanation="Unable to determine automatic fix"
         )
+    
+    def _llm_diagnose_failure(self, extraction: Extraction) -> Optional[Dict]:
+        """
+        Use LLM to diagnose why extraction failed.
+        
+        Returns diagnosis with recommended retry strategy.
+        """
+        if not self.llm_service:
+            return None
+        
+        try:
+            diagnosis = self.llm_service.diagnose_extraction_failure(
+                extraction_data=extraction.data,
+                validation_errors=extraction.validation_errors,
+                region_type=extraction.region_type,
+                confidence=extraction.confidence
+            )
+            
+            logger.info(f"LLM diagnosis for {extraction.extraction_id}: "
+                       f"{diagnosis.get('root_cause', 'unknown')}")
+            
+            return diagnosis
+            
+        except Exception as e:
+            logger.error(f"LLM diagnosis failed: {e}", exc_info=True)
+            return None
     
     def _determine_outcome(self) -> None:
         """
