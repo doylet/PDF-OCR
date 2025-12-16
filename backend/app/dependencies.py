@@ -83,3 +83,9 @@ def get_documentai_client() -> documentai.DocumentProcessorServiceClient:
 
 def get_tasks_client() -> tasks_v2.CloudTasksClient:
     return GCPClients.get_tasks_client()
+
+
+def get_firestore_service():
+    """Dependency for FirestoreService"""
+    from app.services.firestore_service import FirestoreService
+    return FirestoreService(get_firestore_client())
