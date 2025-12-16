@@ -97,6 +97,29 @@ class APIClient {
     }
     return response.blob();
   }
+
+  async submitFeedback(jobId: string, corrections: any[], userId?: string, sessionId?: string): Promise<any> {
+    return this.fetch('/api/v1/feedback/corrections', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        job_id: jobId,
+        corrections,
+        user_id: userId,
+        session_id: sessionId,
+      }),
+    });
+  }
+
+  async getFeedback(jobId: string): Promise<any> {
+    return this.fetch(`/api/v1/feedback/corrections/${jobId}`);
+  }
+
+  async getFeedbackStats(): Promise<any> {
+    return this.fetch('/api/v1/feedback/stats');
+  }
 }
 
 export const apiClient = new APIClient();

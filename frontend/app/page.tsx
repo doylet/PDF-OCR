@@ -100,6 +100,78 @@ export default function Home() {
       await apiClient.uploadPDF(upload_url, selectedFile);
       setPdfId(pdf_id);
       setError(null);
+      
+      // Auto-detect regions after upload
+      setIsDetecting(true);
+      try {
+        const job = await apiClient.createAgenticExtractionJob({
+          pdf_id: pdf_id,
+          regions: [],
+          output_format: outputFormat,
+        });
+
+        // Poll for completion to get detected regions
+        const pollInterval = setInterval(async () => {
+          try {
+            const updatedJob = await apiClient.getJobStatus(job.job_id);
+            if (updatedJob.status === "completed" && updatedJob.debug_graph_url) {
+              clearInterval(pollInterval);
+              const response = await fetch(updatedJob.debug_graph_url);
+              const data = await response.json();
+              
+              const regions: DetectedRegion[] = [];
+              if (data.summary?.trace) {
+                interface TraceEvent {
+                  step: string;
+                  status: string;
+                  region_id?: string;
+                  region_type?: string;
+                  page?: number;
+                  bbox?: { x: number; y: number; w: number; h: number };
+                }
+                
+                const dispatchEvents = data.summary.trace.filter(
+                  (event: TraceEvent) =>
+                    event.step === "dispatch_to_specialist" &&
+                    event.status === "started"
+                );
+                
+                dispatchEvents.forEach((event: TraceEvent) => {
+                  if (event.region_id && event.region_type && event.page !== undefined) {
+                    const bbox = event.bbox 
+                      ? {
+                          x: event.bbox.x,
+                          y: event.bbox.y,
+                          w: event.bbox.w,
+                          h: event.bbox.h
+                        }
+                      : { x: 0, y: 0, w: 1, h: 1 };
+                    
+                    regions.push({
+                      region_id: event.region_id,
+                      region_type: event.region_type,
+                      page: event.page,
+                      bbox,
+                      confidence: 1.0,
+                    });
+                  }
+                });
+              }
+              
+              setDetectedRegions(regions);
+              setIsDetecting(false);
+            } else if (updatedJob.status === "failed") {
+              clearInterval(pollInterval);
+              setIsDetecting(false);
+            }
+          } catch {
+            clearInterval(pollInterval);
+            setIsDetecting(false);
+          }
+        }, 2000);
+      } catch {
+        setIsDetecting(false);
+      }
     } catch (err) {
       setError(
         `Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`
@@ -118,117 +190,7 @@ export default function Home() {
     setRegions(regions.filter((_, i) => i !== index));
   };
 
-  const handleLabelChange = (index: number, label: string) => {
-    const updatedRegions = [...regions];
-    updatedRegions[index] = { ...updatedRegions[index], label };
-    setRegions(updatedRegions);
-  };
 
-  const handleAdoptAIRegions = () => {
-    // Convert detected regions to manual regions
-    // Note: PDFViewer expects pixel coordinates, detectedRegions use normalized 0-1
-    // The conversion happens in PDFViewer when rendering
-    const newManualRegions: Region[] = detectedRegions.map((dr) => ({
-      x: dr.bbox.x,
-      y: dr.bbox.y,
-      width: dr.bbox.w,
-      height: dr.bbox.h,
-      page: dr.page,
-      label: dr.region_type.toLowerCase()
-    }));
-    
-    setRegions([...regions, ...newManualRegions]);
-    // Clear detected regions so they don't show twice
-    setDetectedRegions([]);
-  };
-
-  const handleDetectRegions = async () => {
-    if (!pdfId) return;
-
-    setIsDetecting(true);
-    setError(null);
-
-    try {
-      // Run agentic detection to get suggested regions
-      const job = await apiClient.createAgenticExtractionJob({
-        pdf_id: pdfId,
-        regions: [],
-        output_format: outputFormat,
-      });
-
-      // Poll for completion to get detected regions
-      const pollInterval = setInterval(async () => {
-        try {
-          const updatedJob = await apiClient.getJobStatus(job.job_id);
-          if (updatedJob.status === "completed" && updatedJob.debug_graph_url) {
-            clearInterval(pollInterval);
-            // Fetch debug graph to get detected regions
-            const response = await fetch(updatedJob.debug_graph_url);
-            const data = await response.json();
-            
-            // Parse regions from trace
-            const regions: DetectedRegion[] = [];
-            if (data.summary?.trace) {
-              interface TraceEvent {
-                step: string;
-                status: string;
-                region_id?: string;
-                region_type?: string;
-                page?: number;
-                bbox?: { x: number; y: number; w: number; h: number };
-              }
-              
-              const dispatchEvents = data.summary.trace.filter(
-                (event: TraceEvent) =>
-                  event.step === "dispatch_to_specialist" &&
-                  event.status === "started"
-              );
-              
-              dispatchEvents.forEach((event: TraceEvent) => {
-                if (event.region_id && event.region_type && event.page !== undefined) {
-                  // Use actual bbox if provided, otherwise use placeholder
-                  const bbox = event.bbox 
-                    ? {
-                        x: event.bbox.x,
-                        y: event.bbox.y,
-                        w: event.bbox.w,
-                        h: event.bbox.h
-                      }
-                    : { x: 0, y: 0, w: 1, h: 1 }; // Fallback for old debug graphs
-                  
-                  regions.push({
-                    region_id: event.region_id,
-                    region_type: event.region_type,
-                    page: event.page,
-                    bbox,
-                    confidence: 1.0,
-                  });
-                }
-              });
-            }
-            
-            setDetectedRegions(regions);
-            setIsDetecting(false);
-          } else if (updatedJob.status === "failed") {
-            clearInterval(pollInterval);
-            setError("Region detection failed");
-            setIsDetecting(false);
-          }
-        } catch {
-          clearInterval(pollInterval);
-          setError("Failed to fetch detected regions");
-          setIsDetecting(false);
-        }
-      }, 2000);
-    } catch (error) {
-      setError(
-        `Detection failed: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-      setIsDetecting(false);
-    }
-  };
 
   const handleExtract = async () => {
     if (!pdfId) return;
@@ -433,105 +395,115 @@ export default function Home() {
 
             {/* Right: Controls - 1/3 width */}
             <div className="flex-1 space-y-4 min-w-0 overflow-y-auto">
-              {/* AI Detection */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-lg">
-                <div className="px-4 py-3 border-b border-slate-800">
-                  <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                    <Brain className="text-blue-400" size={16} />
-                    AI Region Detection
-                  </h3>
-                </div>
-                <div className="p-4 space-y-3">
-                  <p className="text-xs text-slate-400">
-                    Let AI suggest regions, then refine manually
-                  </p>
-                  <button
-                    onClick={handleDetectRegions}
-                    disabled={isDetecting || !pdfId}
-                    className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-sm disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-                  >
-                    {isDetecting ? (
-                      <>
-                        <Loader2 className="animate-spin" size={16} />
-                        Detecting...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={16} />
-                        Detect Regions
-                      </>
-                    )}
-                  </button>
-                  {detectedRegions.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-                        <Check size={12} />
-                        {detectedRegions.length} regions detected and visualized
-                      </p>
-                      <button
-                        onClick={handleAdoptAIRegions}
-                        className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition flex items-center justify-center gap-2"
-                      >
-                        <Grid3x3 size={14} />
-                        Add AI Regions to Manual
-                      </button>
+              {/* AI Detection Status */}
+              {isDetecting && (
+                <div className="bg-slate-900/50 border border-slate-800 rounded-lg">
+                  <div className="px-4 py-3 border-b border-slate-800">
+                    <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                      <Brain className="text-blue-400" size={16} />
+                      AI Region Detection
+                    </h3>
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="text-blue-500 animate-spin" size={20} />
+                      <span className="text-sm text-slate-300">Analyzing document...</span>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
+              
+              {detectedRegions.length > 0 && !isDetecting && (
+                <div className="bg-slate-900/50 border border-emerald-800/50 rounded-lg">
+                  <div className="p-3 flex items-center gap-2">
+                    <Check className="text-emerald-400" size={16} />
+                    <p className="text-xs text-emerald-400">
+                      {(() => {
+                        const pageRegionsCount = detectedRegions.filter(r => r.page === currentPage).length;
+                        const totalCount = detectedRegions.length;
+                        return pageRegionsCount === totalCount
+                          ? `${totalCount} ${totalCount === 1 ? 'region' : 'regions'} detected`
+                          : `${pageRegionsCount} of ${totalCount} regions on this page`;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-              {/* Regions List */}
+              {/* Regions List - showing detected regions for current page */}
               <div className="bg-slate-900/50 border border-slate-800 rounded-lg">
                 <div className="px-4 py-3 border-b border-slate-800">
                   <h3 className="text-sm font-semibold text-slate-200">
-                    Regions to Extract
+                    Regions on Page {currentPage}
                   </h3>
                 </div>
                   <div className="p-3">
-                    {regions.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Grid3x3
-                          className="mx-auto text-slate-700 mb-2"
-                          size={32}
-                        />
-                        <p className="text-xs text-slate-500">
-                          Click and drag on the PDF to select regions
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[240px] overflow-y-auto">
-                        {regions.map((region, idx) => (
-                          <div
-                            key={idx}
-                            className="bg-slate-800/50 border border-slate-700 rounded-lg p-3"
-                          >
-                            <div className="flex items-start justify-between mb-2">
-                              <span className="text-xs font-medium text-slate-300">
-                                Region {idx + 1}
-                              </span>
-                              <button
-                                onClick={() => handleRegionRemove(idx)}
-                                className="text-slate-500 hover:text-red-400 transition"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                            <input
-                              type="text"
-                              placeholder="Label (optional)"
-                              value={region.label || ""}
-                              onChange={(e) =>
-                                handleLabelChange(idx, e.target.value)
-                              }
-                              className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    {(() => {
+                      const pageRegions = detectedRegions.filter(r => r.page === currentPage);
+                      
+                      if (pageRegions.length === 0) {
+                        return (
+                          <div className="text-center py-8">
+                            <Grid3x3
+                              className="mx-auto text-slate-700 mb-2"
+                              size={32}
                             />
-                            <p className="text-xs text-slate-500 mt-1.5">
-                              Page {region.page}
+                            <p className="text-xs text-slate-500">
+                              {detectedRegions.length === 0 
+                                ? 'AI will detect regions automatically' 
+                                : 'No regions on this page'}
                             </p>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        );
+                      }
+                      
+                      return (
+                        <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                          {pageRegions.map((region) => {
+                            const typeColors: Record<string, string> = {
+                              TABLE: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+                              HEADING: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+                              LIST: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+                              TEXT: 'text-blue-400 border-blue-500/30 bg-blue-500/10',
+                              NONE: 'text-slate-400 border-slate-500/30 bg-slate-500/10',
+                            };
+                            const colorClasses = typeColors[region.region_type] || typeColors.TEXT;
+                            
+                            return (
+                              <div
+                                key={region.region_id}
+                                className={`border rounded-lg p-3 ${colorClasses}`}
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1">
+                                    <span className="text-xs font-bold uppercase">
+                                      {region.region_type}
+                                    </span>
+                                    <p className="text-xs opacity-70 mt-0.5">
+                                      {Math.round(region.confidence * 100)}% confidence
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-current/20">
+                                  <input
+                                    type="checkbox"
+                                    id={`extract-${region.region_id}`}
+                                    className="w-4 h-4 rounded border-current/30 bg-slate-900/50 text-current focus:ring-current focus:ring-offset-0"
+                                  />
+                                  <label
+                                    htmlFor={`extract-${region.region_id}`}
+                                    className="text-xs font-medium cursor-pointer select-none"
+                                  >
+                                    Include in extraction
+                                  </label>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

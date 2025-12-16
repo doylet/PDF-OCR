@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Region } from "@/types/api";
-import { FileText, Brain } from "lucide-react";
+import { FileText } from "lucide-react";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -23,6 +23,15 @@ interface DetectedRegion {
   confidence: number;
 }
 
+type RegionEditMode = 'move' | 'resize-nw' | 'resize-ne' | 'resize-sw' | 'resize-se' | 'resize-n' | 'resize-s' | 'resize-e' | 'resize-w' | null;
+
+interface RegionCorrection {
+  original: DetectedRegion;
+  corrected?: DetectedRegion;
+  action: 'delete' | 'move' | 'resize' | 'retype';
+  timestamp: string;
+}
+
 interface PDFViewerProps {
   file: File | null;
   regions: Region[];
@@ -31,6 +40,11 @@ interface PDFViewerProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   detectedRegions?: DetectedRegion[];
+  onRegionCorrection?: (correction: RegionCorrection) => void;
+  jobId?: string;
+  onRegionsSelectedForExtraction?: (regionIds: string[]) => void;
+  onRegionSelected?: (regionId: string | null) => void;
+  selectedRegionId?: string | null;
 }
 
 
@@ -42,6 +56,10 @@ export default function PDFViewer({
   currentPage,
   onPageChange,
   detectedRegions = [],
+  onRegionCorrection,
+  onRegionsSelectedForExtraction,
+  onRegionSelected,
+  selectedRegionId,
 }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -57,6 +75,27 @@ export default function PDFViewer({
   } | null>(null);
   const [scale, setScale] = useState<number>(1.0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  
+  // Interactive editing state
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(selectedRegionId || null);
+  
+  // Sync with external selection
+  useEffect(() => {
+    if (selectedRegionId !== undefined) {
+      setSelectedRegion(selectedRegionId);
+    }
+  }, [selectedRegionId]);
+  const [editMode, setEditMode] = useState<RegionEditMode>(null);
+  const [editedRegions, setEditedRegions] = useState<DetectedRegion[]>(detectedRegions);
+  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
+  const [corrections, setCorrections] = useState<RegionCorrection[]>([]);
+  const [selectedForExtraction, setSelectedForExtraction] = useState<Set<string>>(new Set());
+  const [originalRegionBeforeEdit, setOriginalRegionBeforeEdit] = useState<DetectedRegion | null>(null);
+  
+  // Update edited regions when detectedRegions changes
+  useEffect(() => {
+    setEditedRegions(detectedRegions);
+  }, [detectedRegions]);
 
   // Create a stable blob URL from the file
   useEffect(() => {
@@ -112,31 +151,134 @@ export default function PDFViewer({
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
-    setIsDrawing(true);
-    setStartPoint({ x, y });
+    
+    // Check if clicking on existing region
+    const clickedRegion = getRegionAtPoint(x, y, canvas);
+    
+    // Ctrl/Cmd + click toggles extraction selection without editing
+    if (clickedRegion && (e.ctrlKey || e.metaKey)) {
+      toggleExtractionSelection(clickedRegion.region_id);
+      return;
+    }
+    
+    if (clickedRegion) {
+      // Select region and immediately enter edit mode for click-and-drag
+      const mode = getResizeHandle(x, y, clickedRegion, canvas);
+      console.log('Click: Selected region', clickedRegion.region_id, 'edit mode:', mode, 'startPoint:', { x, y });
+      setSelectedRegion(clickedRegion.region_id);
+      if (onRegionSelected) {
+        onRegionSelected(clickedRegion.region_id);
+      }
+      setEditMode(mode);
+      setIsDrawing(false);
+      setStartPoint({ x, y });
+      setOriginalRegionBeforeEdit(clickedRegion); // Store original before editing
+    } else {
+      // Drawing new manual region
+      setSelectedRegion(null);
+      if (onRegionSelected) {
+        onRegionSelected(null);
+      }
+      setIsDrawing(true);
+      setStartPoint({ x, y });
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !startPoint) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    
+    // Update cursor based on hover
+    const hoveredReg = getRegionAtPoint(x, y, canvas);
+    setHoveredRegion(hoveredReg?.region_id || null);
+    
+    if (hoveredReg && selectedRegion === hoveredReg.region_id) {
+      const mode = getResizeHandle(x, y, hoveredReg, canvas);
+      canvas.style.cursor = mode === 'move' ? 'move' : 
+                           mode?.includes('resize') ? 'nwse-resize' : 'default';
+    } else if (hoveredReg) {
+      canvas.style.cursor = 'pointer';
+    } else {
+      canvas.style.cursor = 'crosshair';
+    }
+    
+    // Handle drawing new region
+    if (isDrawing && startPoint) {
+      const width = x - startPoint.x;
+      const height = y - startPoint.y;
 
-    const width = x - startPoint.x;
-    const height = y - startPoint.y;
-
-    setCurrentRect({
-      x: Math.min(startPoint.x, x),
-      y: Math.min(startPoint.y, y),
-      width: Math.abs(width),
-      height: Math.abs(height),
-      page: currentPage,
-    });
+      setCurrentRect({
+        x: Math.min(startPoint.x, x),
+        y: Math.min(startPoint.y, y),
+        width: Math.abs(width),
+        height: Math.abs(height),
+        page: currentPage,
+      });
+      return;
+    }
+    
+    // Handle editing existing region
+    if (editMode && selectedRegion && startPoint) {
+      const region = editedRegions.find(r => r.region_id === selectedRegion);
+      if (!region) {
+        console.log('Region not found for editing:', selectedRegion);
+        return;
+      }
+      
+      const dx = (x - startPoint.x) / canvas.width;
+      const dy = (y - startPoint.y) / canvas.height;
+      console.log('Move: mode=', editMode, 'dx=', dx.toFixed(4), 'dy=', dy.toFixed(4));
+      
+      const newBbox = { ...region.bbox };
+      
+      if (editMode === 'move') {
+        newBbox.x += dx;
+        newBbox.y += dy;
+      } else if (editMode === 'resize-se') {
+        newBbox.w += dx;
+        newBbox.h += dy;
+      } else if (editMode === 'resize-nw') {
+        newBbox.x += dx;
+        newBbox.y += dy;
+        newBbox.w -= dx;
+        newBbox.h -= dy;
+      } else if (editMode === 'resize-ne') {
+        newBbox.y += dy;
+        newBbox.w += dx;
+        newBbox.h -= dy;
+      } else if (editMode === 'resize-sw') {
+        newBbox.x += dx;
+        newBbox.w -= dx;
+        newBbox.h += dy;
+      } else if (editMode === 'resize-e') {
+        newBbox.w += dx;
+      } else if (editMode === 'resize-w') {
+        newBbox.x += dx;
+        newBbox.w -= dx;
+      } else if (editMode === 'resize-n') {
+        newBbox.y += dy;
+        newBbox.h -= dy;
+      } else if (editMode === 'resize-s') {
+        newBbox.h += dy;
+      }
+      
+      // Clamp to bounds
+      newBbox.x = Math.max(0, Math.min(1 - newBbox.w, newBbox.x));
+      newBbox.y = Math.max(0, Math.min(1 - newBbox.h, newBbox.y));
+      newBbox.w = Math.max(0.02, Math.min(1 - newBbox.x, newBbox.w));
+      newBbox.h = Math.max(0.02, Math.min(1 - newBbox.y, newBbox.h));
+      
+      const corrected = { ...region, bbox: newBbox };
+      
+      setEditedRegions(editedRegions.map(r => 
+        r.region_id === selectedRegion ? corrected : r
+      ));
+      setStartPoint({ x, y });
+    }
   };
 
   const handleMouseUp = () => {
@@ -161,9 +303,142 @@ export default function PDFViewer({
 
       onRegionAdd(pdfRegion);
     }
+    
+    // Record correction if we were editing a region
+    if (editMode && selectedRegion && originalRegionBeforeEdit) {
+      const editedRegion = editedRegions.find(r => r.region_id === selectedRegion);
+      if (editedRegion) {
+        const correction: RegionCorrection = {
+          original: originalRegionBeforeEdit,
+          corrected: editedRegion,
+          action: editMode === 'move' ? 'move' : 'resize',
+          timestamp: new Date().toISOString(),
+        };
+        
+        setCorrections([...corrections, correction]);
+        
+        if (onRegionCorrection) {
+          onRegionCorrection(correction);
+        }
+      }
+    }
+    
     setIsDrawing(false);
     setStartPoint(null);
     setCurrentRect(null);
+    setEditMode(null);
+    setOriginalRegionBeforeEdit(null);
+  };
+  
+  // Interactive editing handlers
+  const getRegionAtPoint = (x: number, y: number, canvas: HTMLCanvasElement): DetectedRegion | null => {
+    const pageRegions = editedRegions.filter(r => r.page === currentPage);
+    
+    // Check in reverse order (topmost first)
+    for (let i = pageRegions.length - 1; i >= 0; i--) {
+      const region = pageRegions[i];
+      const rx = region.bbox.x * canvas.width;
+      const ry = region.bbox.y * canvas.height;
+      const rw = region.bbox.w * canvas.width;
+      const rh = region.bbox.h * canvas.height;
+      
+      if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rh) {
+        return region;
+      }
+    }
+    return null;
+  };
+  
+  const getResizeHandle = (x: number, y: number, region: DetectedRegion, canvas: HTMLCanvasElement): RegionEditMode => {
+    const rx = region.bbox.x * canvas.width;
+    const ry = region.bbox.y * canvas.height;
+    const rw = region.bbox.w * canvas.width;
+    const rh = region.bbox.h * canvas.height;
+    const handleSize = 8;
+    
+    // Check corners first
+    if (Math.abs(x - rx) < handleSize && Math.abs(y - ry) < handleSize) return 'resize-nw';
+    if (Math.abs(x - (rx + rw)) < handleSize && Math.abs(y - ry) < handleSize) return 'resize-ne';
+    if (Math.abs(x - rx) < handleSize && Math.abs(y - (ry + rh)) < handleSize) return 'resize-sw';
+    if (Math.abs(x - (rx + rw)) < handleSize && Math.abs(y - (ry + rh)) < handleSize) return 'resize-se';
+    
+    // Check edges
+    if (Math.abs(x - rx) < handleSize && y > ry && y < ry + rh) return 'resize-w';
+    if (Math.abs(x - (rx + rw)) < handleSize && y > ry && y < ry + rh) return 'resize-e';
+    if (Math.abs(y - ry) < handleSize && x > rx && x < rx + rw) return 'resize-n';
+    if (Math.abs(y - (ry + rh)) < handleSize && x > rx && x < rx + rw) return 'resize-s';
+    
+    return 'move';
+  };
+  
+  const handleRegionDelete = (regionId: string) => {
+    const region = editedRegions.find(r => r.region_id === regionId);
+    if (!region) return;
+    
+    const correction: RegionCorrection = {
+      original: region,
+      action: 'delete',
+      timestamp: new Date().toISOString(),
+    };
+    
+    setCorrections([...corrections, correction]);
+    setEditedRegions(editedRegions.filter(r => r.region_id !== regionId));
+    setSelectedRegion(null);
+    
+    if (onRegionCorrection) {
+      onRegionCorrection(correction);
+    }
+  };
+  
+  const handleRegionTypeChange = (regionId: string, newType: string) => {
+    const region = editedRegions.find(r => r.region_id === regionId);
+    if (!region) return;
+    
+    // If marked as NONE, treat as deletion/false positive
+    if (newType === 'NONE') {
+      const correction: RegionCorrection = {
+        original: region,
+        action: 'delete',
+        timestamp: new Date().toISOString(),
+      };
+      setCorrections([...corrections, correction]);
+      setEditedRegions(editedRegions.filter(r => r.region_id !== regionId));
+      setSelectedRegion(null);
+      if (onRegionCorrection) {
+        onRegionCorrection(correction);
+      }
+      return;
+    }
+    
+    const corrected = { ...region, region_type: newType };
+    
+    const correction: RegionCorrection = {
+      original: region,
+      corrected,
+      action: 'retype',
+      timestamp: new Date().toISOString(),
+    };
+    
+    setCorrections([...corrections, correction]);
+    setEditedRegions(editedRegions.map(r => r.region_id === regionId ? corrected : r));
+    
+    if (onRegionCorrection) {
+      onRegionCorrection(correction);
+    }
+  };
+
+  const toggleExtractionSelection = (regionId: string) => {
+    const newSelection = new Set(selectedForExtraction);
+    if (newSelection.has(regionId)) {
+      newSelection.delete(regionId);
+    } else {
+      newSelection.add(regionId);
+    }
+    setSelectedForExtraction(newSelection);
+    
+    if (onRegionsSelectedForExtraction) {
+      onRegionsSelectedForExtraction(Array.from(newSelection));
+    }
   };
 
   useEffect(() => {
@@ -177,11 +452,14 @@ export default function PDFViewer({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Draw detected regions (agentic) for current page
-    const pageDetectedRegions = detectedRegions.filter(
+    const pageEditedRegions = editedRegions.filter(
       (r) => r.page === currentPage
     );
-    pageDetectedRegions.forEach((region) => {
-      // Convert from normalized fractions (0-1) to canvas pixels
+    pageEditedRegions.forEach((region) => {
+      const isSelected = selectedRegion === region.region_id;
+      const isHovered = hoveredRegion === region.region_id;
+      const isMarkedForExtraction = selectedForExtraction.has(region.region_id);
+      
       const canvasX = region.bbox.x * canvas.width;
       const canvasY = region.bbox.y * canvas.height;
       const canvasWidth = region.bbox.w * canvas.width;
@@ -193,15 +471,21 @@ export default function PDFViewer({
           ? "#10b981"
           : region.region_type === "HEADING"
           ? "#f59e0b"
-          : "#8b5cf6";
+          : region.region_type === "LIST"
+          ? "#8b5cf6"
+          : region.region_type === "NONE"
+          ? "#64748b"
+          : "#3b82f6";
 
+      // Dimmed appearance for regions not selected for extraction
+      const opacity = isMarkedForExtraction ? "33" : "11";
       ctx.strokeStyle = color;
-      ctx.fillStyle = `${color}33`; // 20% opacity
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]); // Dashed line for detected regions
+      ctx.fillStyle = `${color}${opacity}`;
+      ctx.lineWidth = isSelected ? 4 : isHovered ? 3 : isMarkedForExtraction ? 2 : 1;
+      ctx.setLineDash(isSelected || isHovered ? [] : [5, 5]);
       ctx.fillRect(canvasX, canvasY, canvasWidth, canvasHeight);
       ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
-      ctx.setLineDash([]); // Reset
+      ctx.setLineDash([]);
 
       // Draw region type label
       ctx.fillStyle = color;
@@ -211,12 +495,88 @@ export default function PDFViewer({
         canvasX + 5,
         canvasY + 15
       );
+
+      // Draw checkmark for regions marked for extraction
+      if (isMarkedForExtraction) {
+        const checkSize = 20;
+        const checkX = canvasX + canvasWidth - checkSize - 5;
+        const checkY = canvasY + 5;
+        
+        // Draw circle background
+        ctx.fillStyle = "#10b981";
+        ctx.beginPath();
+        ctx.arc(checkX + checkSize/2, checkY + checkSize/2, checkSize/2, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Draw checkmark
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(checkX + 5, checkY + checkSize/2);
+        ctx.lineTo(checkX + checkSize/2.5, checkY + checkSize - 6);
+        ctx.lineTo(checkX + checkSize - 4, checkY + 4);
+        ctx.stroke();
+      }
+
+      // Draw resize handles for selected region
+      if (isSelected) {
+        const handleSize = 8;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+
+        // Corner handles
+        const corners = [
+          { x: canvasX, y: canvasY }, // NW
+          { x: canvasX + canvasWidth, y: canvasY }, // NE
+          { x: canvasX, y: canvasY + canvasHeight }, // SW
+          { x: canvasX + canvasWidth, y: canvasY + canvasHeight }, // SE
+        ];
+        
+        // Edge handles
+        const edges = [
+          { x: canvasX + canvasWidth / 2, y: canvasY }, // N
+          { x: canvasX + canvasWidth / 2, y: canvasY + canvasHeight }, // S
+          { x: canvasX, y: canvasY + canvasHeight / 2 }, // W
+          { x: canvasX + canvasWidth, y: canvasY + canvasHeight / 2 }, // E
+        ];
+
+        [...corners, ...edges].forEach(handle => {
+          ctx.fillRect(
+            handle.x - handleSize / 2,
+            handle.y - handleSize / 2,
+            handleSize,
+            handleSize
+          );
+          ctx.strokeRect(
+            handle.x - handleSize / 2,
+            handle.y - handleSize / 2,
+            handleSize,
+            handleSize
+          );
+        });
+
+        // Draw delete icon in top-right corner
+        const deleteX = canvasX + canvasWidth - 20;
+        const deleteY = canvasY + 5;
+        ctx.fillStyle = "#ef4444";
+        ctx.beginPath();
+        ctx.arc(deleteX, deleteY, 10, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(deleteX - 4, deleteY - 4);
+        ctx.lineTo(deleteX + 4, deleteY + 4);
+        ctx.moveTo(deleteX + 4, deleteY - 4);
+        ctx.lineTo(deleteX - 4, deleteY + 4);
+        ctx.stroke();
+      }
     });
 
     // Draw existing manual regions for current page
     const pageRegions = regions.filter((r) => r.page === currentPage);
     pageRegions.forEach((region, index) => {
-      // Convert from normalized fractions (0-1) to canvas pixels
       const canvasX = region.x * canvas.width;
       const canvasY = region.y * canvas.height;
       const canvasWidth = region.width * canvas.width;
@@ -228,7 +588,6 @@ export default function PDFViewer({
       ctx.fillRect(canvasX, canvasY, canvasWidth, canvasHeight);
       ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
 
-      // Draw region number
       ctx.fillStyle = "#3b82f6";
       ctx.font = "bold 16px Arial";
       ctx.fillText(`#${index + 1}`, canvasX + 5, canvasY + 20);
@@ -252,7 +611,7 @@ export default function PDFViewer({
         currentRect.height
       );
     }
-  }, [regions, detectedRegions, currentRect, currentPage, pageDimensions]);
+  }, [regions, editedRegions, currentRect, currentPage, pageDimensions, selectedRegion, hoveredRegion, selectedForExtraction]);
 
   if (!file) {
     return (
@@ -360,29 +719,88 @@ export default function PDFViewer({
           </div>
         </div>
 
-        {/* Overlay for regions */}
-        {regions.length > 0 && (
-          <div className="absolute top-4 left-4 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
-            <p className="text-xs text-slate-300">
-              {regions.length} region{regions.length !== 1 ? "s" : ""} selected
-            </p>
-          </div>
-        )}
-
         {/* Detected regions indicator */}
-        {detectedRegions.length > 0 && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-500/20 backdrop-blur-sm px-3 py-2 rounded-md border border-green-400/50 z-10">
-            <p className="text-xs text-green-300">
-              {detectedRegions.filter((r) => r.page === currentPage).length}{" "}
-              detected on page {currentPage}
-            </p>
+        {editedRegions.length > 0 && (() => {
+          const currentPageRegions = editedRegions.filter((r) => r.page === currentPage);
+          return (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800/95 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-600 z-10">
+            <div className="text-xs text-slate-300">
+              <span className="font-semibold text-emerald-400">{currentPageRegions.length}</span>{" "}
+              {currentPageRegions.length === 1 ? 'region' : 'regions'} detected on page {currentPage}
+            </div>
           </div>
-        )}
+          );
+        })()}
 
-        {/* Drawing hint */}
-        <div className="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
-          <p className="text-xs text-slate-300">Click & drag to draw regions</p>
+        {/* Drawing hint - positioned to avoid overlap */}
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
+          <p className="text-xs text-slate-300">
+            {selectedRegion 
+              ? 'Edit region: drag to move, resize handles, or delete' 
+              : 'Click to edit region • Cmd/Ctrl+Click to toggle extraction • Drag to draw new'}
+          </p>
         </div>
+
+        {/* Region Edit Controls */}
+        {selectedRegion && (() => {
+          const region = editedRegions.find(r => r.region_id === selectedRegion);
+          if (!region || region.page !== currentPage) return null;
+          
+          return (
+            <div className="absolute top-16 right-4 bg-slate-800/95 backdrop-blur-sm px-4 py-3 rounded-lg border border-slate-600 shadow-lg z-20 space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium text-slate-300">Region Type:</span>
+                <select
+                  value={region.region_type}
+                  onChange={(e) => handleRegionTypeChange(selectedRegion, e.target.value)}
+                  className="text-xs bg-slate-700 text-slate-200 border border-slate-600 rounded px-2 py-1 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="TABLE">TABLE</option>
+                  <option value="HEADING">HEADING</option>
+                  <option value="LIST">LIST</option>
+                  <option value="TEXT">TEXT</option>
+                  <option value="NONE" className="text-slate-500">NONE (False Positive)</option>
+                </select>
+              </div>
+              
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <span>Confidence:</span>
+                <span className="font-mono text-slate-300">{Math.round(region.confidence * 100)}%</span>
+              </div>
+              
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <span>Size:</span>
+                <span className="font-mono text-slate-300">
+                  {Math.round(region.bbox.w * 100)}% × {Math.round(region.bbox.h * 100)}%
+                </span>
+              </div>
+              
+              <div className="border-t border-slate-600 my-2 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedForExtraction.has(selectedRegion)}
+                    onChange={() => toggleExtractionSelection(selectedRegion)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <span className="text-xs text-slate-300 font-medium">
+                    Include in Extraction
+                  </span>
+                </label>
+              </div>
+              
+              <button
+                onClick={() => handleRegionDelete(selectedRegion)}
+                className="w-full mt-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded transition flex items-center justify-center gap-1"
+              >
+                <span>×</span>
+                Delete Region
+              </button>
+            </div>
+          );
+        })()}
+
+
 
         {/* Integrated Page Navigation */}
         <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-10">

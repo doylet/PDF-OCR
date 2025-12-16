@@ -22,6 +22,7 @@ from app.models.document_graph import (
     RegionType, ValidationStatus, ExtractionMethod, JobOutcome
 )
 from app.agents.layout_agent import LayoutAgent
+from app.agents.structure_gate import StructureGate
 from app.services.llm_service import LLMService, LLMRole
 from app.config import get_settings
 
@@ -204,24 +205,39 @@ class ExpertOrchestrator:
         # Process with PDF native text
         LayoutAgent.process_page(self.graph, page_num, self.pdf_path)
         
-        # Step 2: Dispatch to specialists
-        page_regions = [r for r in self.graph.regions if r.page == page_num]
+        # Step 1.5: Structure Gate - filter proposed regions
+        page_regions_proposed = [r for r in self.graph.regions if r.page == page_num]
         
         self.graph.trace.append({
             "step": "layout_agent",
             "status": "completed",
             "page_num": page_num,
-            "regions_proposed": len(page_regions),
-            "region_types": [r.region_type.value for r in page_regions],
+            "regions_proposed": len(page_regions_proposed),
+            "region_types": [r.region_type.value for r in page_regions_proposed],
             "timestamp": datetime.now().isoformat()
         })
         
-        for region in page_regions:
+        # Apply structure gate to filter out non-extractable regions
+        approved_regions = StructureGate.filter_regions(self.graph, page_num)
+        
+        self.graph.trace.append({
+            "step": "structure_gate",
+            "status": "completed",
+            "page_num": page_num,
+            "regions_proposed": len(page_regions_proposed),
+            "regions_approved": len(approved_regions),
+            "rejection_rate": round(1 - len(approved_regions) / max(len(page_regions_proposed), 1), 2),
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Step 2: Dispatch only approved regions to specialists
+        for region in approved_regions:
             self._dispatch_to_specialist(region)
         
-        # Fallback: If no table regions detected, try Camelot on full page
-        table_regions = [r for r in page_regions if r.region_type == RegionType.TABLE]
+        # Fallback: If no table regions approved, try Camelot on full page
+        table_regions = [r for r in approved_regions if r.region_type == RegionType.TABLE]
         if not table_regions:
+            logger.info(f"No table regions approved on page {page_num}, trying Camelot fallback")
             self._extract_tables_with_camelot(page_num)
     
     def _dispatch_to_specialist(self, region: Region) -> None:
