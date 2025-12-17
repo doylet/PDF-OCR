@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Path
-from app.services.bigquery_service import BigQueryService
+from app.services.bigquery import BigQuery
 from app.dependencies import get_bigquery_service
 from app.models.api import DocumentUploadResponse
 from pydantic import BaseModel, Field
@@ -44,7 +44,7 @@ class DocumentUpdateRequest(BaseModel):
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: str = Path(..., description="Document ID"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Get document by ID
@@ -73,7 +73,7 @@ async def get_document(
 @router.get("/{document_id}/versions", response_model=List[DocumentVersionResponse])
 async def get_document_versions(
     document_id: str = Path(..., description="Document ID"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Get all versions for a document
@@ -97,7 +97,7 @@ async def get_document_versions(
 @router.get("/versions/{version_id}", response_model=DocumentVersionResponse)
 async def get_document_version(
     version_id: str = Path(..., description="DocumentVersion ID (SHA-256 hash)"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Get document version by ID (SHA-256 hash)
@@ -127,7 +127,7 @@ async def get_document_version(
 async def update_document(
     document_id: str = Path(..., description="Document ID"),
     update: DocumentUpdateRequest = ...,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Update document metadata

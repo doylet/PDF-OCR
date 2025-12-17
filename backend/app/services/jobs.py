@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class JobService:
+class Jobs:
     """Service for managing extraction jobs in Firestore"""
     
     def __init__(self):
@@ -74,4 +74,4 @@ class JobService:
         logger.info(f"Updated job {job_id} to status: {status}")
 
 
-job_service = JobService()
+job_service = Jobs()

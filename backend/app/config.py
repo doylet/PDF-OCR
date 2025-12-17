@@ -48,9 +48,8 @@ class Settings(BaseSettings):
     bigquery_dataset: str = "data_hero"
     
     # Cloud Tasks
-    cloud_tasks_queue: str = "extraction-queue"
-    cloud_tasks_location: str = "us-central1"
-    worker_service_url: str = "https://placeholder.run.app"
+    task_queue_name: str = "extraction-queue"
+    api_base_url: str = "https://pdf-ocr-api-785693222332.us-central1.run.app"
     
     # LLM Configuration (Google Gemini)
     gemini_api_key: str = ""  # Optional - enables agentic features

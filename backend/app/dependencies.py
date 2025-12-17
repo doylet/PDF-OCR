@@ -104,12 +104,12 @@ def get_tasks_client() -> tasks_v2.CloudTasksClient:
 
 
 def get_firestore_service():
-    """Dependency for FirestoreService"""
-    from app.services.firestore_service import FirestoreService
-    return FirestoreService(get_firestore_client())
+    """Dependency for Firestore"""
+    from app.services.firestore import Firestore
+    return Firestore(get_firestore_client())
 
 
 def get_bigquery_service():
-    """Dependency for BigQueryService"""
-    from app.services.bigquery_service import BigQueryService
-    return BigQueryService(get_bigquery_client())
+    """Dependency for BigQuery"""
+    from app.services.bigquery import BigQuery
+    return BigQuery(get_bigquery_client())

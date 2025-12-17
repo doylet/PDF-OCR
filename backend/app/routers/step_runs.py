@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Path
-from app.services.bigquery_service import BigQueryService
-from app.services.step_run_service import StepRunService
+from app.services.bigquery import BigQuery
+from app.services.step_run import StepRun
 from app.dependencies import get_bigquery_service
 from pydantic import BaseModel
 import logging
@@ -37,7 +37,7 @@ class StepRunRetryResponse(BaseModel):
 @router.get("/{step_run_id}", response_model=StepRunResponse)
 async def get_step_run(
     step_run_id: str = Path(..., description="StepRun ID"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Get step run by ID
@@ -45,7 +45,7 @@ async def get_step_run(
     Returns detailed information about a specific step execution.
     """
     try:
-        step_run_service = StepRunService(bq_service)
+        step_run_service = StepRun(bq_service)
         step = step_run_service.get_step_run(step_run_id)
         
         if not step:
@@ -63,7 +63,7 @@ async def get_step_run(
 @router.post("/{step_run_id}/retry", response_model=StepRunRetryResponse)
 async def retry_step_run(
     step_run_id: str = Path(..., description="StepRun ID"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Retry a failed step run
@@ -72,7 +72,7 @@ async def retry_step_run(
     Transitions step to PENDING and increments retry_count.
     """
     try:
-        step_run_service = StepRunService(bq_service)
+        step_run_service = StepRun(bq_service)
         
         # Check step exists and is retryable
         step = step_run_service.get_step_run(step_run_id)

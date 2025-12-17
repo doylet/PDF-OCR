@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Path, Query
-from app.services.bigquery_service import BigQueryService
-from app.services.claims_service import ClaimsService
+from app.services.bigquery import BigQuery
+from app.container import get_claims
 from app.dependencies import get_bigquery_service
 from pydantic import BaseModel, Field
 import logging
@@ -63,7 +63,7 @@ async def list_claims(
     room_id: Optional[str] = Query(None, description="Filter by Room"),
     limit: int = Query(100, ge=1, le=500, description="Max results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     List claims with optional filtering.
@@ -72,7 +72,7 @@ async def list_claims(
     Results are ordered by page number and confidence.
     """
     try:
-        claims_service = ClaimsService(bq_service)
+        claims_service = Claims(bq_service)
         
         if document_version_id:
             claims = claims_service.get_claims_for_document(
@@ -109,7 +109,7 @@ async def list_claims(
 @router.get("/{claim_id}", response_model=ClaimResponse)
 async def get_claim(
     claim_id: str = Path(..., description="Claim ID"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Get a specific claim by ID.
@@ -117,7 +117,7 @@ async def get_claim(
     Returns full claim details including bounding box and provenance.
     """
     try:
-        claims_service = ClaimsService(bq_service)
+        claims_service = Claims(bq_service)
         claim = claims_service.get_claim_by_id(claim_id)
         
         if not claim:
@@ -136,7 +136,7 @@ async def get_claim(
 async def submit_claim_feedback(
     claim_id: str = Path(..., description="Claim ID"),
     feedback: ClaimFeedbackRequest = ...,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Submit human-in-the-loop feedback for a claim.
@@ -145,7 +145,7 @@ async def submit_claim_feedback(
     Feedback can be used for model retraining and confidence scoring.
     """
     try:
-        claims_service = ClaimsService(bq_service)
+        claims_service = Claims(bq_service)
         
         # Build feedback object
         feedback_data = {
@@ -177,7 +177,7 @@ async def submit_claim_feedback(
 @router.get("/document-versions/{document_version_id}/summary")
 async def get_claims_summary(
     document_version_id: str = Path(..., description="DocumentVersion ID"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Get summary statistics for claims in a document.
@@ -185,7 +185,7 @@ async def get_claims_summary(
     Returns counts by claim type, average confidence, and feedback statistics.
     """
     try:
-        claims_service = ClaimsService(bq_service)
+        claims_service = Claims(bq_service)
         
         # Get all claims for document
         all_claims = claims_service.get_claims_for_document(

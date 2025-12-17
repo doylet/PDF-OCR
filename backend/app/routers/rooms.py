@@ -10,8 +10,8 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.bigquery_service import BigQueryService
-from app.services.room_service import RoomService
+from app.services.bigquery import BigQuery
+from app.services.room import Room
 from app.dependencies import get_bigquery_service
 
 
@@ -78,11 +78,11 @@ class CompletenessResponse(BaseModel):
 @router.post("", response_model=RoomResponse, status_code=201)
 async def create_room(
     request: CreateRoomRequest,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """Create a new Room for multi-document analysis."""
     
-    service = RoomService(bq_service)
+    service = Room(bq_service)
     
     room = service.create_room(
         name=request.name,
@@ -98,11 +98,11 @@ async def create_room(
 @router.get("/{room_id}", response_model=RoomResponse)
 async def get_room(
     room_id: str,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """Retrieve a Room by ID."""
     
-    service = RoomService(bq_service)
+    service = Room(bq_service)
     room = service.get_room(room_id)
     
     if not room:
@@ -116,11 +116,11 @@ async def list_rooms(
     status: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """List all rooms with optional status filtering."""
     
-    service = RoomService(bq_service)
+    service = Room(bq_service)
     rooms = service.list_rooms(status=status, limit=limit, offset=offset)
     
     return [RoomResponse(**room) for room in rooms]
@@ -130,7 +130,7 @@ async def list_rooms(
 async def add_document_to_room(
     room_id: str,
     request: AddDocumentRequest,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Add a DocumentVersion to a Room.
@@ -139,7 +139,7 @@ async def add_document_to_room(
     be added to multiple Rooms for different analysis contexts.
     """
     
-    service = RoomService(bq_service)
+    service = Room(bq_service)
     
     room = service.get_room(room_id)
     if not room:
@@ -172,11 +172,11 @@ async def get_documents_in_room(
     room_id: str,
     limit: int = 100,
     offset: int = 0,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """Retrieve all DocumentVersions in a Room."""
     
-    service = RoomService(bq_service)
+    service = Room(bq_service)
     
     room = service.get_room(room_id)
     if not room:
@@ -191,11 +191,11 @@ async def get_documents_in_room(
 async def remove_document_from_room(
     room_id: str,
     document_version_id: str,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """Remove a DocumentVersion from a Room."""
     
-    service = RoomService(bq_service)
+    service = Room(bq_service)
     
     success = service.remove_document_from_room(room_id, document_version_id)
     
@@ -212,7 +212,7 @@ async def remove_document_from_room(
 async def check_room_completeness(
     room_id: str,
     required_roles: List[str],
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Check if a Room contains all required document types.
@@ -225,7 +225,7 @@ async def check_room_completeness(
     Returns which roles are present and which are missing.
     """
     
-    service = RoomService(bq_service)
+    service = Room(bq_service)
     
     room = service.get_room(room_id)
     if not room:

@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-from app.services.firestore_service import FirestoreService
+from app.services.firestore import Firestore
 from app.dependencies import get_firestore_service
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
@@ -49,7 +49,7 @@ class FeedbackResponse(BaseModel):
 @router.post("/corrections", response_model=FeedbackResponse)
 async def submit_corrections(
     submission: FeedbackSubmission,
-    firestore: FirestoreService = Depends(get_firestore_service),
+    firestore: Firestore = Depends(get_firestore_service),
 ):
     try:
         # Store feedback in Firestore
@@ -90,7 +90,7 @@ async def submit_corrections(
 @router.get("/corrections/{job_id}")
 async def get_corrections(
     job_id: str,
-    firestore: FirestoreService = Depends(get_firestore_service),
+    firestore: Firestore = Depends(get_firestore_service),
 ):
     try:
         # Query feedback for this job
@@ -119,7 +119,7 @@ async def get_corrections(
 
 @router.get("/stats")
 async def get_feedback_stats(
-    firestore: FirestoreService = Depends(get_firestore_service),
+    firestore: Firestore = Depends(get_firestore_service),
 ):
     try:
         # Get all feedback documents

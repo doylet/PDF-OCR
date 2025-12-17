@@ -7,7 +7,7 @@ from pypdf import PdfReader, PdfWriter
 logger = logging.getLogger(__name__)
 
 
-class TableExtractionService:
+class TableExtractor:
     """Service for extracting tables from PDFs using Camelot"""
     
     @staticmethod
@@ -72,7 +72,7 @@ class TableExtractionService:
                     
                     if tables and len(tables) > 0 and len(tables[0].df) > 0:
                         logger.info(f"Lattice mode found {len(tables)} table(s)")
-                        return TableExtractionService._convert_tables_to_rows(tables)
+                        return TableExtractor._convert_tables_to_rows(tables)
                 except Exception as e:
                     logger.warning(f"Lattice mode failed: {e}")
                 
@@ -91,7 +91,7 @@ class TableExtractionService:
                     
                     if tables and len(tables) > 0 and len(tables[0].df) > 0:
                         logger.info(f"Stream mode found {len(tables)} table(s)")
-                        return TableExtractionService._convert_tables_to_rows(tables)
+                        return TableExtractor._convert_tables_to_rows(tables)
                 except Exception as e:
                     logger.warning(f"Stream mode failed: {e}")
             finally:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Header, Request, Depends, UploadFile, File
 from app.models.api import UploadResponse, DocumentUploadRequest, DocumentUploadResponse
 from app.services.storage import storage_service
-from app.services.bigquery_service import BigQueryService
+from app.services.bigquery import BigQuery
 from app.dependencies import get_bigquery_service
 from app.config import get_settings
 import logging
@@ -33,7 +33,7 @@ async def upload_document(
     uploaded_by_user_id: str = Header(..., alias="X-User-Id"),
     name: Optional[str] = Header(None, alias="X-Document-Name"),
     description: Optional[str] = Header(None, alias="X-Document-Description"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Upload a document with SHA-256 deduplication.

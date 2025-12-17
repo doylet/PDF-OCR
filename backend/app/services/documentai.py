@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class DocumentAIService:
+class DocumentAI:
     """Service for Document AI processing"""
     
     def __init__(self):
@@ -151,7 +151,7 @@ class DocumentAIService:
     
     def process_regions(self, pdf_bytes: bytes, regions: List[Region], job_id: str = None) -> List[ExtractionResult]:
         """Process multiple regions and return extraction results"""
-        from app.services.table_extractor import TableExtractionService
+        from app.services.table_extractor import TableExtractor
         from app.services.text_parser import TextParser
         from app.services.storage import storage_service
         from app.services.region_analyzer import RegionAnalyzer, RegionType
@@ -161,7 +161,7 @@ class DocumentAIService:
         for idx, region in enumerate(regions):
             try:
                 # First attempt: Try Camelot for table extraction
-                camelot_tables = TableExtractionService.extract_tables_from_region(
+                camelot_tables = TableExtractor.extract_tables_from_region(
                     pdf_bytes,
                     region.page,
                     region.x,
@@ -274,4 +274,4 @@ class DocumentAIService:
         return results
 
 
-documentai_service = DocumentAIService()
+documentai_service = DocumentAI()

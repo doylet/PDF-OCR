@@ -1,20 +1,27 @@
 steps:
-  # Build and deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/pdf-ocr-api:$COMMIT_SHA', '-f', 'backend/Dockerfile', 'backend']
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/pdf-ocr-api:$COMMIT_SHA']
+  
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'pdf-ocr-api'
-      - '--source'
-      - 'backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/pdf-ocr-api:$COMMIT_SHA'
       - '--platform'
       - 'managed'
       - '--region'
       - 'us-central1'
       - '--allow-unauthenticated'
       - '--memory'
-      - '1Gi'
+      - '2Gi'
+      - '--cpu'
+      - '2'
       - '--timeout'
       - '300'
       - '--max-instances'
@@ -22,15 +29,22 @@ steps:
       - '--min-instances'
       - '0'
       - '--set-env-vars'
-      - 'GCP_PROJECT_ID=${PROJECT_ID},GCP_PROCESSOR_ID=${_GCP_PROCESSOR_ID},GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},API_KEY=${_API_KEY},GCP_LOCATION=us,FIRESTORE_COLLECTION=extraction_jobs,CORS_ORIGINS=${_CORS_ORIGINS},GOOGLE_APPLICATION_CREDENTIALS=/secrets/service-account-key.json'
+      - 'GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=us,GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},BIGQUERY_DATASET=data_hero,TASK_QUEUE_NAME=extraction-queue,API_BASE_URL=https://pdf-ocr-api-785693222332.us-central1.run.app,GCP_PROCESSOR_ID=${_GCP_PROCESSOR_ID},FIRESTORE_COLLECTION=extraction_jobs,CORS_ORIGINS=${_CORS_ORIGINS},DEBUG=false'
       - '--set-secrets'
-      - '/secrets/service-account-key.json=pdf-ocr-service-account-key:latest'
+      - 'API_KEY=pdf-ocr-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest'
+      - '--service-account'
+      - 'pdf-ocr-service-account@${PROJECT_ID}.iam.gserviceaccount.com'
 
 substitutions:
   _GCP_PROCESSOR_ID: 'c8bdc7facf581d61'
   _GCS_BUCKET_NAME: 'pdf-ocr-mvp'
-  _API_KEY: 'M3CIlxn7kDnBSRy5OeDn1m36EkF1YTD9iaQqZiB02ys='
-  _CORS_ORIGINS: 'http://localhost:3000 https://pdf-ocr-frontend-785693222332.us-central1.run.app'
+  _CORS_ORIGINS: 'http://localhost:3000,https://pdf-ocr-frontend-785693222332.us-central1.run.app'
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: 'N1_HIGHCPU_8'
+
+timeout: 1200s
+
+images:
+  - 'gcr.io/$PROJECT_ID/pdf-ocr-api:$COMMIT_SHA'

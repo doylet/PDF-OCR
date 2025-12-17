@@ -26,6 +26,7 @@ from app.routers import (
     evidence,
     extraction,  # Legacy: Direct extraction endpoint
     feedback,  # Legacy: HITL feedback endpoint
+    tasks,  # Cloud Tasks handlers
 )
 from app.config import get_settings
 import logging
@@ -72,6 +73,9 @@ app.include_router(evidence.router)
 # Legacy routers (Firestore-backed, for backward compatibility)
 app.include_router(extraction.router)
 app.include_router(feedback.router)
+
+# Task handlers (Cloud Tasks callbacks)
+app.include_router(tasks.router)
 
 
 @app.get("/")

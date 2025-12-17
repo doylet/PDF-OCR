@@ -20,7 +20,7 @@ from app.models.document_graph import (
     DocumentGraph, Token, Region, BBox, 
     TokenType, RegionType, ExtractionMethod
 )
-from app.services.llm_service import LLMService, LLMRole
+from app.services.llm import LLM, LLMRole
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class LayoutAgent:
         Args:
             llm_service: Optional LLM service for ambiguous layout decisions
         """
-        self.llm_service = llm_service or LLMService() if settings.enable_llm_agents else None
+        self.llm_service = llm_service or LLM() if settings.enable_llm_agents else None
         self.use_llm = settings.enable_llm_agents and self.llm_service is not None
     
     # Type inference patterns

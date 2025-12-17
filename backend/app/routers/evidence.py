@@ -10,8 +10,8 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.bigquery_service import BigQueryService
-from app.services.evidence_service import EvidenceService
+from app.services.bigquery import BigQuery
+from app.services.evidence import Evidence
 from app.dependencies import get_bigquery_service
 
 
@@ -100,7 +100,7 @@ class BundleStatisticsResponse(BaseModel):
 @router.post("/search", response_model=List[ClaimEvidenceResponse])
 async def search_evidence(
     request: EvidenceSearchRequest,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Search for claims matching evidence criteria.
@@ -111,7 +111,7 @@ async def search_evidence(
     Returns claims ordered by relevance score and confidence.
     """
     
-    service = EvidenceService(bq_service)
+    service = Evidence(bq_service)
     
     claims = service.search_evidence(
         room_id=request.room_id,
@@ -128,7 +128,7 @@ async def search_evidence(
 @router.post("/bundles", response_model=EvidenceBundleResponse, status_code=201)
 async def create_evidence_bundle(
     request: CreateEvidenceBundleRequest,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Create an immutable Evidence Bundle from selected claims.
@@ -137,7 +137,7 @@ async def create_evidence_bundle(
     by capturing a snapshot of relevant claims at a point in time.
     """
     
-    service = EvidenceService(bq_service)
+    service = Evidence(bq_service)
     
     bundle = service.create_evidence_bundle(
         name=request.name,
@@ -154,11 +154,11 @@ async def create_evidence_bundle(
 @router.get("/bundles/{bundle_id}", response_model=EvidenceBundleResponse)
 async def get_evidence_bundle(
     bundle_id: str,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """Retrieve an evidence bundle by ID."""
     
-    service = EvidenceService(bq_service)
+    service = Evidence(bq_service)
     bundle = service.get_evidence_bundle(bundle_id)
     
     if not bundle:
@@ -173,7 +173,7 @@ async def get_evidence_bundle(
 @router.get("/bundles/{bundle_id}/full", response_model=EvidenceBundleWithClaimsResponse)
 async def get_evidence_bundle_with_claims(
     bundle_id: str,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Retrieve an evidence bundle with full claim details.
@@ -182,7 +182,7 @@ async def get_evidence_bundle_with_claims(
     Useful for rendering complete evidence packages.
     """
     
-    service = EvidenceService(bq_service)
+    service = Evidence(bq_service)
     bundle = service.get_evidence_bundle_with_claims(bundle_id)
     
     if not bundle:
@@ -199,11 +199,11 @@ async def list_evidence_bundles(
     room_id: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """List evidence bundles with optional Room filtering."""
     
-    service = EvidenceService(bq_service)
+    service = Evidence(bq_service)
     bundles = service.list_evidence_bundles(
         room_id=room_id,
         limit=limit,
@@ -216,7 +216,7 @@ async def list_evidence_bundles(
 @router.get("/bundles/{bundle_id}/statistics", response_model=BundleStatisticsResponse)
 async def get_bundle_statistics(
     bundle_id: str,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Calculate statistics for an evidence bundle.
@@ -227,7 +227,7 @@ async def get_bundle_statistics(
     - Number of source documents
     """
     
-    service = EvidenceService(bq_service)
+    service = Evidence(bq_service)
     stats = service.get_claim_statistics_for_bundle(bundle_id)
     
     if not stats:

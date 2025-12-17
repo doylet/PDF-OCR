@@ -6,7 +6,7 @@ This agent is TRULY AGENTIC - it uses LLM reasoning instead of rules.
 import logging
 from typing import List, Dict, Optional
 from app.models.document_graph import Extraction
-from app.services.llm_service import llm_service
+from app.services.llm import LLM, LLMRole
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class SchemaAgent:
                    f"({len(table_data)} rows × {len(table_data[0])} cols)")
         
         # Call LLM for schema understanding
-        schema_result = llm_service.detect_table_schema(
+        schema_result = LLM.detect_table_schema(
             table_data=table_data,
             context=context or {}
         )

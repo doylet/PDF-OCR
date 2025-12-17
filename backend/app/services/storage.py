@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class StorageService:
+class Storage:
     """Service for Cloud Storage operations"""
     
     def __init__(self):
@@ -112,4 +112,4 @@ class StorageService:
         return debug_url
 
 
-storage_service = StorageService()
+storage_service = Storage()

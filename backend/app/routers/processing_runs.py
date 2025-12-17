@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Path, Query
-from app.services.bigquery_service import BigQueryService
-from app.services.processing_run_service import ProcessingRunService
-from app.services.step_run_service import StepRunService
+from app.services.bigquery import BigQuery
+from app.services.processing_run import ProcessingRun
+from app.services.step_run import StepRun
 from app.dependencies import get_bigquery_service
 from pydantic import BaseModel, Field
 import logging
@@ -52,7 +52,7 @@ class ProcessingRunResponse(BaseModel):
 @router.post("", response_model=ProcessingRunResponse, status_code=201)
 async def create_processing_run(
     request: ProcessingRunCreateRequest,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Create a new processing run for a document version
@@ -75,7 +75,7 @@ async def create_processing_run(
             )
         
         # Create processing run
-        processing_run_service = ProcessingRunService(bq_service)
+        processing_run_service = ProcessingRun(bq_service.client, bq_service.dataset_id)
         run = processing_run_service.create_processing_run(
             doc_version_id=request.document_version_id,
             run_type=request.run_type,
@@ -111,7 +111,7 @@ async def create_processing_run(
 async def get_processing_run(
     run_id: str = Path(..., description="ProcessingRun ID"),
     include_steps: bool = Query(False, description="Include step details"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Get processing run status with optional step details
@@ -119,7 +119,7 @@ async def get_processing_run(
     Used for polling run progress.
     """
     try:
-        processing_run_service = ProcessingRunService(bq_service)
+        processing_run_service = ProcessingRun(bq_service.client, bq_service.dataset_id)
         run = processing_run_service.get_processing_run(run_id)
         
         if not run:
@@ -129,7 +129,7 @@ async def get_processing_run(
         
         if include_steps:
             # Fetch all steps for this run
-            step_run_service = StepRunService(bq_service)
+            step_run_service = StepRun(bq_service)
             steps = step_run_service.list_steps_for_run(run_id)
             response_data["steps"] = [StepRunResponse(**step) for step in steps]
         
@@ -148,7 +148,7 @@ async def list_processing_runs(
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=500, description="Max results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     List processing runs with filters
@@ -156,7 +156,7 @@ async def list_processing_runs(
     Supports pagination and filtering by document_version_id and status.
     """
     try:
-        processing_run_service = ProcessingRunService(bq_service)
+        processing_run_service = ProcessingRun(bq_service.client, bq_service.dataset_id)
         runs = processing_run_service.list_runs(
             doc_version_id=document_version_id,
             status=status,
@@ -174,7 +174,7 @@ async def list_processing_runs(
 @router.post("/{run_id}/cancel", response_model=ProcessingRunResponse)
 async def cancel_processing_run(
     run_id: str = Path(..., description="ProcessingRun ID"),
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Cancel a processing run
@@ -182,7 +182,7 @@ async def cancel_processing_run(
     Transitions run to FAILED status with cancellation message.
     """
     try:
-        processing_run_service = ProcessingRunService(bq_service)
+        processing_run_service = ProcessingRun(bq_service)
         
         # Check run exists and is cancellable
         run = processing_run_service.get_processing_run(run_id)

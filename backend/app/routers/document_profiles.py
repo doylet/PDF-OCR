@@ -10,8 +10,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.bigquery_service import BigQueryService
-from app.services.document_profile_service import DocumentProfileService
+from app.services.bigquery import BigQuery
+from app.services.document_profile import DocumentProfile
 from app.dependencies import get_bigquery_service
 
 
@@ -48,11 +48,11 @@ class ProfileRoleQueryResponse(BaseModel):
 @router.get("/{profile_id}", response_model=DocumentProfileResponse)
 async def get_profile_by_id(
     profile_id: str,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """Retrieve a document profile by its unique ID."""
     
-    service = DocumentProfileService(bq_service)
+    service = DocumentProfile(bq_service)
     profile = service.get_profile_by_id(profile_id)
     
     if not profile:
@@ -64,7 +64,7 @@ async def get_profile_by_id(
 @router.get("/document-versions/{document_version_id}", response_model=DocumentProfileResponse)
 async def get_profile_for_document_version(
     document_version_id: str,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Retrieve the document profile for a specific DocumentVersion.
@@ -72,7 +72,7 @@ async def get_profile_for_document_version(
     Returns the most recent profile if multiple exist (e.g., re-profiling after corrections).
     """
     
-    service = DocumentProfileService(bq_service)
+    service = DocumentProfile(bq_service)
     profile = service.get_profile_for_document_version(document_version_id)
     
     if not profile:
@@ -89,7 +89,7 @@ async def get_profiles_by_role(
     document_role: str,
     quality_min: Optional[float] = None,
     limit: int = 100,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Query document profiles by role with optional quality filtering.
@@ -105,7 +105,7 @@ async def get_profiles_by_role(
     Quality score ranges from 0.0 to 1.0 (Document AI quality metric).
     """
     
-    service = DocumentProfileService(bq_service)
+    service = DocumentProfile(bq_service)
     profiles = service.get_profiles_by_role(
         document_role=document_role,
         quality_min=quality_min,
@@ -123,7 +123,7 @@ async def get_profiles_by_role(
 async def get_skewed_documents(
     min_skew_degrees: float = 5.0,
     limit: int = 100,
-    bq_service: BigQueryService = Depends(get_bigquery_service)
+    bq_service: BigQuery = Depends(get_bigquery_service)
 ):
     """
     Find documents with skew issues requiring correction.
@@ -132,7 +132,7 @@ async def get_skewed_documents(
     Useful for identifying poor-quality scans that may need preprocessing.
     """
     
-    service = DocumentProfileService(bq_service)
+    service = DocumentProfile(bq_service)
     profiles = service.get_skewed_documents(
         min_skew_degrees=min_skew_degrees,
         limit=limit
