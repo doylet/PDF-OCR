@@ -16,16 +16,22 @@ export const RegionItem = ({
   isProcessing = false 
 }: RegionItemProps) => {
   const typeColors = theme.colors.regionTypes;
-  const colorClasses = typeColors[region.region_type as keyof typeof typeColors] || typeColors.TEXT;
+  const colors = typeColors[region.region_type as keyof typeof typeColors] || typeColors.TEXT;
 
   return (
-    <div className={cn('border p-3', theme.radius.lg, colorClasses)}>
+    <div className={cn(
+      'border p-3',
+      theme.radius.lg,
+      colors.foreground,
+      colors.background,
+      colors.border
+    )}>
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
           <Badge variant={getVariantForType(region.region_type)} size="sm">
             {region.region_type}
           </Badge>
-          <p className="text-xs opacity-70 mt-0.5">
+          <p className={cn('text-xs mt-0.5', colors.accent)}>
             {Math.round(region.confidence * 100)}% confidence
           </p>
         </div>

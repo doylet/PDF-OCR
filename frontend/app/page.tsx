@@ -306,7 +306,9 @@ export default function Home() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `extraction-result.${outputFormat}`;
+      // Use the format from the job request, not the global outputFormat state
+      const format = job.output_format || outputFormat;
+      a.download = `extraction-result.${format}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

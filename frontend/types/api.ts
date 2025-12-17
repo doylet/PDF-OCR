@@ -39,6 +39,7 @@ export interface JobStatus {
   updated_at: string;
   pdf_id: string;
   regions_count: number;
+  output_format?: 'csv' | 'tsv' | 'json';
   error_message?: string;
   debug_graph_url?: string;
   result_url?: string;

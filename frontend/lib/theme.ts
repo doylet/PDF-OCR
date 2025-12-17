@@ -10,6 +10,15 @@ export const theme = {
       hover: 'hover:bg-slate-800',
       hoverLight: 'hover:bg-slate-900/80',
     },
+    foreground: {
+      primary: 'text-white',
+      secondary: 'text-slate-200',
+      tertiary: 'text-slate-300',
+      muted: 'text-slate-400',
+      subtle: 'text-slate-500',
+      disabled: 'text-slate-600',
+    },
+    // Deprecated - use foreground instead
     text: {
       primary: 'text-white',
       secondary: 'text-slate-200',
@@ -40,11 +49,36 @@ export const theme = {
       redBgHover: 'hover:bg-red-700',
     },
     regionTypes: {
-      TABLE: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-      HEADING: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
-      LIST: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
-      TEXT: 'text-blue-400 border-blue-500/30 bg-blue-500/10',
-      NONE: 'text-slate-400 border-slate-500/30 bg-slate-500/10',
+      TABLE: {
+        foreground: 'text-emerald-100',
+        background: 'bg-emerald-500/10',
+        border: 'border-emerald-500/30',
+        accent: 'text-emerald-400',
+      },
+      HEADING: {
+        foreground: 'text-amber-100',
+        background: 'bg-amber-500/10',
+        border: 'border-amber-500/30',
+        accent: 'text-amber-400',
+      },
+      LIST: {
+        foreground: 'text-purple-100',
+        background: 'bg-purple-500/10',
+        border: 'border-purple-500/30',
+        accent: 'text-purple-400',
+      },
+      TEXT: {
+        foreground: 'text-blue-100',
+        background: 'bg-blue-500/10',
+        border: 'border-blue-500/30',
+        accent: 'text-blue-400',
+      },
+      NONE: {
+        foreground: 'text-slate-200',
+        background: 'bg-slate-500/10',
+        border: 'border-slate-500/30',
+        accent: 'text-slate-400',
+      },
     },
   },
   spacing: {
