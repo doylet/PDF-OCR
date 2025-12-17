@@ -20,8 +20,11 @@ class Settings(BaseSettings):
     gcs_pdf_folder: str = "pdfs"
     gcs_results_folder: str = "results"
     
-    # Firestore
+    # Firestore (DEPRECATED - migrating to BigQuery)
     firestore_collection: str = "extraction_jobs"
+    
+    # BigQuery
+    bigquery_dataset: str = "data_hero"
     
     # Cloud Tasks
     cloud_tasks_queue: str = "extraction-queue"
