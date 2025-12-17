@@ -144,9 +144,13 @@ class ValidatorAgent:
             return {"is_valid": True, "confidence": 1.0, "issues": [], "suggestions": []}
         
         try:
+            # Get region to determine region_type
+            region = next((r for r in graph.regions if r.region_id == extraction.region_id), None)
+            region_type = region.region_type.value if region else "unknown"
+            
             result = self.llm_service.validate_extraction(
                 extraction_data=extraction.data,
-                region_type=extraction.region_type,
+                region_type=region_type,
                 document_type=graph.metadata.get("document_type", "unknown"),
                 schema=extraction.schema
             )

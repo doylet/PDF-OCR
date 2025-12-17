@@ -1,14 +1,86 @@
-import camelot
 import io
 import logging
+import os
+import subprocess
 from typing import List, Optional
 from pypdf import PdfReader, PdfWriter
 
 logger = logging.getLogger(__name__)
 
+# Ensure Ghostscript paths are at the FRONT of PATH (before shell aliases)
+gs_paths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+current_path = os.environ.get("PATH", "")
+new_paths = [p for p in gs_paths if p not in current_path]
+if new_paths:
+    os.environ["PATH"] = ":".join(new_paths) + ":" + current_path
+    logger.debug(f"Prepended Ghostscript paths to PATH: {new_paths}")
+
+# Check if Camelot and Ghostscript are available
+CAMELOT_AVAILABLE = False
+try:
+    import camelot
+    
+    # Set Ghostscript path explicitly for Camelot
+    try:
+        import camelot.utils
+        # Camelot uses shutil.which to find gs - ensure it's in PATH
+        import shutil
+        gs_path = shutil.which("gs")
+        if gs_path:
+            logger.info(f"✓ Ghostscript found at: {gs_path}")
+            # Monkey-patch camelot to use explicit path
+            camelot.utils.GS = gs_path
+        else:
+            # Try explicit paths
+            for path in ["/opt/homebrew/bin/gs", "/usr/local/bin/gs", "/usr/bin/gs"]:
+                try:
+                    result = subprocess.run([path, "--version"], capture_output=True, check=True, timeout=5)
+                    logger.info(f"✓ Ghostscript found at: {path}")
+                    camelot.utils.GS = path
+                    gs_path = path
+                    break
+                except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                    continue
+        
+        if not gs_path:
+            logger.warning("Ghostscript not found - Camelot table extraction may fail")
+    except Exception as e:
+        logger.warning(f"Could not configure Ghostscript path for Camelot: {e}")
+    
+    CAMELOT_AVAILABLE = True
+    logger.info("Camelot library loaded successfully")
+except ImportError as e:
+    logger.warning(f"Camelot not available: {e}. Table extraction will be limited.")
+
+# Ghostscript check - try multiple possible command names
+import subprocess
+
+GHOSTSCRIPT_AVAILABLE = False
+for cmd in ["/opt/homebrew/bin/gs", "/usr/local/bin/gs", "/usr/bin/gs", "gs"]:
+    try:
+        subprocess.run([cmd, "--version"], capture_output=True, check=True, timeout=5)
+        GHOSTSCRIPT_AVAILABLE = True
+        logger.info(f"✓ Ghostscript is available: {cmd}")
+        break
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        continue
+
+if not GHOSTSCRIPT_AVAILABLE:
+    logger.error(
+        "Ghostscript is not installed! Install it via:\n"
+        "  macOS: brew install ghostscript\n"
+        "  Ubuntu/Debian: sudo apt-get install ghostscript\n"
+        "  Docs: https://camelot-py.readthedocs.io/en/master/user/install-deps.html"
+    )
+
 
 class TableExtractor:
     """Service for extracting tables from PDFs using Camelot"""
+    
+    @staticmethod
+    def is_available() -> bool:
+        """Check if table extraction is available (requires Ghostscript)"""
+        return CAMELOT_AVAILABLE and GHOSTSCRIPT_AVAILABLE
     
     @staticmethod
     def extract_tables_from_region(
@@ -31,6 +103,14 @@ class TableExtractor:
         Returns:
             List of rows (each row is a list of cell values), or None if no tables found
         """
+        # Check if Camelot is available
+        if not CAMELOT_AVAILABLE:
+            logger.warning(
+                "Camelot not available - table extraction disabled. "
+                "Install: pip install 'camelot-py[cv]'"
+            )
+            return None
+        
         try:
             import tempfile
             import os
@@ -62,6 +142,7 @@ class TableExtractor:
                 
                 # Try lattice mode first (for tables with visible borders)
                 try:
+                    logger.debug(f"Attempting Camelot lattice extraction for page {page}")
                     tables = camelot.read_pdf(
                         tmp_path,
                         pages=str(page),
@@ -71,13 +152,23 @@ class TableExtractor:
                     )
                     
                     if tables and len(tables) > 0 and len(tables[0].df) > 0:
-                        logger.info(f"Lattice mode found {len(tables)} table(s)")
+                        logger.info(f"✓ Camelot lattice mode extracted {len(tables)} table(s) from page {page}")
                         return TableExtractor._convert_tables_to_rows(tables)
+                    else:
+                        logger.debug(f"Lattice mode found no tables on page {page}")
                 except Exception as e:
-                    logger.warning(f"Lattice mode failed: {e}")
+                    logger.warning(f"Camelot lattice mode failed on page {page}: {e}")
+                    if "Ghostscript" in str(e):
+                        logger.error(
+                            "CRITICAL: Ghostscript is not installed! "
+                            "This will prevent table extraction. Install via:\n"
+                            "  macOS: brew install ghostscript\n"
+                            "  Ubuntu/Debian: sudo apt-get install ghostscript"
+                        )
                 
                 # Try stream mode (for tables without visible borders)
                 try:
+                    logger.debug(f"Attempting Camelot stream extraction for page {page}")
                     tables = camelot.read_pdf(
                         tmp_path,
                         pages=str(page),
@@ -90,20 +181,38 @@ class TableExtractor:
                     )
                     
                     if tables and len(tables) > 0 and len(tables[0].df) > 0:
-                        logger.info(f"Stream mode found {len(tables)} table(s)")
+                        logger.info(f"✓ Camelot stream mode extracted {len(tables)} table(s) from page {page}")
                         return TableExtractor._convert_tables_to_rows(tables)
+                    else:
+                        logger.debug(f"Stream mode found no tables on page {page}")
                 except Exception as e:
-                    logger.warning(f"Stream mode failed: {e}")
+                    logger.warning(f"Camelot stream mode failed on page {page}: {e}")
+                    if "Ghostscript" in str(e):
+                        logger.error(
+                            "CRITICAL: Ghostscript is not installed! "
+                            "This will prevent table extraction. Install via:\n"
+                            "  macOS: brew install ghostscript\n"
+                            "  Ubuntu/Debian: sudo apt-get install ghostscript"
+                        )
             finally:
                 # Clean up temp file
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
             
-            logger.warning("No tables detected by Camelot")
+            logger.info(f"No tables detected by Camelot on page {page} in specified region")
             return None
             
         except Exception as e:
-            logger.error(f"Error extracting tables with Camelot: {e}")
+            logger.error(
+                f"Camelot extraction failed for page {page}: {e}",
+                exc_info=True,
+                extra={"page": page, "region": f"x={x}, y={y}, w={width}, h={height}"}
+            )
+            if "Ghostscript" in str(e):
+                logger.error(
+                    "CRITICAL: Ghostscript dependency missing! "
+                    "All Camelot table extractions will fail until installed."
+                )
             return None
     
     @staticmethod

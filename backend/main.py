@@ -13,6 +13,14 @@ Architecture:
 - Evidence bundles for decision support
 """
 
+# CRITICAL: Set PATH before any imports to ensure Ghostscript is found by Camelot
+import os
+gs_paths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+current_path = os.environ.get("PATH", "")
+new_paths = [p for p in gs_paths if p not in current_path]
+if new_paths:
+    os.environ["PATH"] = ":".join(new_paths) + ":" + current_path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import (
@@ -27,9 +35,11 @@ from app.routers import (
     extraction,  # Legacy: Direct extraction endpoint
     feedback,  # Legacy: HITL feedback endpoint
     tasks,  # Cloud Tasks handlers
+    health,  # Health and diagnostics
 )
 from app.config import get_settings
 import logging
+import sys
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +49,16 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Check dependencies on startup
+try:
+    from app.utils.dependency_checker import verify_dependencies
+    logger.info("Verifying system dependencies...")
+    verify_dependencies(strict=False)  # Warn but don't crash on missing deps
+except ImportError:
+    logger.warning("Dependency checker not available, skipping checks")
+except Exception as e:
+    logger.error(f"Dependency check failed: {e}")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -77,6 +97,9 @@ app.include_router(feedback.router)
 # Task handlers (Cloud Tasks callbacks)
 app.include_router(tasks.router)
 
+# Health and diagnostics
+app.include_router(health.router)
+
 
 @app.get("/")
 async def root():
@@ -84,7 +107,7 @@ async def root():
     return {
         "status": "healthy",
         "service": settings.app_name,
-        "version": "1.0.0"
+        "version": "2.0.0"
     }
 
 

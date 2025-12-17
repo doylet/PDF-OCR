@@ -363,10 +363,17 @@ class ExpertOrchestrator:
         Called when LayoutAgent doesn't detect any table regions.
         """
         import camelot
+        import os
         
         logger.info(f"Using Camelot fallback for page {page_num}")
         
+        # Ensure Ghostscript is in PATH for this subprocess
+        original_path = os.environ.get("PATH", "")
         try:
+            # Prepend Ghostscript paths
+            gs_paths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+            os.environ["PATH"] = ":".join(gs_paths) + ":" + original_path
+            
             # Camelot uses 1-indexed pages
             tables = camelot.read_pdf(
                 self.pdf_path,
@@ -406,7 +413,15 @@ class ExpertOrchestrator:
                 logger.info(f"Camelot extracted {len(rows)} rows from page {page_num} table {table_idx}")
         
         except Exception as e:
-            logger.error(f"Camelot fallback failed for page {page_num}: {e}")
+            if "Ghostscript" in str(e):
+                logger.warning(f"Camelot requires Ghostscript for table extraction on page {page_num}. "
+                             f"Install via: brew install ghostscript (macOS) or apt-get install ghostscript (Linux). "
+                             f"Falling back to Document AI for tables.")
+            else:
+                logger.error(f"Camelot fallback failed for page {page_num}: {e}")
+        finally:
+            # Restore original PATH
+            os.environ["PATH"] = original_path
     
     def _validate_extractions(self) -> None:
         """
@@ -422,8 +437,11 @@ class ExpertOrchestrator:
         
         logger.info("Validating all extractions")
         
+        # Create validator instance
+        validator = ValidatorAgent(llm_service=self.llm_service)
+        
         for extraction in self.graph.extractions:
-            decision = ValidatorAgent.validate_extraction(self.graph, extraction)
+            decision = validator.validate_extraction(self.graph, extraction)
             
             self.graph.decisions.append({
                 "agent": "validator",
