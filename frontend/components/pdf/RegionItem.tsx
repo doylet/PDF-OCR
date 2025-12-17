@@ -1,6 +1,6 @@
 import { DetectedRegion } from '@/types/api';
 import { cn, theme } from '@/lib/theme';
-import { Badge } from './Badge';
+import { Badge } from '@/components/ui';
 
 interface RegionItemProps {
   region: DetectedRegion;

@@ -1,6 +1,6 @@
 import { cn, theme } from '@/lib/theme';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from './Button';
+import { Button } from '@/components/ui';
 
 interface PageNavigationProps {
   currentPage: number;

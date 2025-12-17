@@ -1,6 +1,6 @@
 import { cn, theme } from '@/lib/theme';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
-import { Button } from './Button';
+import { Button } from '@/components/ui';
 
 interface ZoomControlsProps {
   zoomLevel: number;

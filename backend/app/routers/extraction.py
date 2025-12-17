@@ -91,7 +91,8 @@ async def create_extraction_job(
             job_id, 
             extraction_request.pdf_id, 
             len(extraction_request.regions),
-            request_data=extraction_request.dict()
+            request_data=extraction_request.dict(),
+            output_format=extraction_request.output_format
         )
         
         # For MVP: Process synchronously to avoid Cloud Run CPU throttling issues
@@ -134,7 +135,8 @@ async def create_agentic_extraction_job(
             job_id,
             extraction_request.pdf_id,
             len(extraction_request.regions) if extraction_request.regions else 0,
-            request_data={**extraction_request.dict(), "method": "agentic"}
+            request_data={**extraction_request.dict(), "method": "agentic"},
+            output_format=extraction_request.output_format
         )
         
         await process_agentic_extraction(job_id, extraction_request)

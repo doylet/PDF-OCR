@@ -41,6 +41,7 @@ class JobStatus(BaseModel):
     error_message: Optional[str] = None
     debug_graph_url: Optional[str] = None
     approved_regions: Optional[List[DetectedRegion]] = None
+    output_format: Optional[Literal["csv", "tsv", "json"]] = None
 
 
 class ExtractionResult(BaseModel):
