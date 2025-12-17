@@ -58,3 +58,20 @@ class UploadResponse(BaseModel):
     pdf_id: str
     upload_url: str
     file_name: str
+
+
+class DocumentUploadRequest(BaseModel):
+    """Request to upload a document"""
+    filename: str = Field(..., description="Original filename")
+    uploaded_by_user_id: str = Field(..., description="User ID uploading the document")
+    name: Optional[str] = Field(None, description="Optional display name (defaults to filename)")
+    description: Optional[str] = Field(None, description="Optional document description")
+
+
+class DocumentUploadResponse(BaseModel):
+    """Response after document upload with versioning"""
+    document_id: str = Field(..., description="Document entity ID")
+    document_version_id: str = Field(..., description="SHA-256 hash of content")
+    upload_url: str = Field(..., description="Signed URL for uploading PDF bytes")
+    was_duplicate: bool = Field(..., description="True if content hash already existed")
+    filename: str = Field(..., description="Original filename")
