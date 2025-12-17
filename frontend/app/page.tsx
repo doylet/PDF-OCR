@@ -477,13 +477,13 @@ export default function Home() {
               )}
               
               {detectedRegions.length > 0 && !isDetecting && (
-                <Card className="border-emerald-800/50">
+                <Card className="border-emerald-500/30">
                   <div className="p-3 flex items-center gap-2">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <circle cx="8" cy="8" r="7" className="stroke-emerald-400" strokeWidth="2" />
-                      <path d="M5 8l2 2 4-5" className="stroke-emerald-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <circle cx="8" cy="8" r="7" className={theme.colors.accent.emerald} strokeWidth="2" />
+                      <path d="M5 8l2 2 4-5" className={theme.colors.accent.emerald} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    <p className="text-xs text-emerald-400">
+                    <p className={cn('text-xs', theme.colors.accent.emerald)}>
                       {(() => {
                         const pageRegionsCount = detectedRegions.filter(r => r.page === currentPage).length;
                         const totalCount = detectedRegions.length;
@@ -591,7 +591,7 @@ export default function Home() {
                               <Sparkles className={theme.colors.accent.emerald} size={14} />
                               <p className={cn('text-xs', theme.colors.text.muted)}>Detected</p>
                             </div>
-                            <p className="text-lg font-semibold text-emerald-400 tabular-nums">
+                            <p className={cn('text-lg font-semibold tabular-nums', theme.colors.accent.emerald)}>
                               {job.detected_entities}
                             </p>
                           </Card>
@@ -607,12 +607,12 @@ export default function Home() {
                           <Card variant="strong" className="p-3">
                             <div className="flex items-center gap-2 mb-1">
                               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                <circle cx="7" cy="7" r="6" className="stroke-emerald-400" strokeWidth="2" />
-                                <path d="M4 7l2 2 4-4" className="stroke-emerald-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                <circle cx="7" cy="7" r="6" className={theme.colors.accent.emerald} strokeWidth="2" />
+                                <path d="M4 7l2 2 4-4" className={theme.colors.accent.emerald} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                               <p className={cn('text-xs', theme.colors.text.muted)}>Status</p>
                             </div>
-                            <p className="text-lg font-semibold text-emerald-400">Done</p>
+                            <p className={cn('text-lg font-semibold', theme.colors.accent.emerald)}>Done</p>
                           </Card>
                         </div>
 
@@ -643,7 +643,8 @@ export default function Home() {
 
                         <div className={cn(
                           'flex items-center gap-3 p-3',
-                          'bg-emerald-500/10 border border-emerald-500/30',
+                          theme.colors.accent.emeraldBg,
+                          'border border-emerald-500/30',
                           theme.radius.lg
                         )}>
                           <div className={cn(
@@ -657,10 +658,10 @@ export default function Home() {
                             </svg>
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-emerald-400">
+                            <p className={cn('text-sm font-medium', theme.colors.accent.emerald)}>
                               Extraction Complete
                             </p>
-                            <p className="text-xs text-emerald-300/70">
+                            <p className={cn('text-xs', theme.colors.text.muted)}>
                               Your data is ready to download
                             </p>
                           </div>
