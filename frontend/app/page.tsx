@@ -493,7 +493,7 @@ export default function Home() {
                       })()}
                     </p>
                   </div>
-                </div>
+                </Card>
               )}
 
               {/* Regions List - showing detected regions for current page */}
