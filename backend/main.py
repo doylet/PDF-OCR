@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import upload, extraction
+from app.routers import upload, extraction, feedback
 from app.config import get_settings
 import logging
 
@@ -25,7 +25,7 @@ app = FastAPI(
 logger.info(f"CORS Origins: {settings.cors_origins}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["*"],  # Temporary: allow all origins for testing
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -36,6 +36,7 @@ app.add_middleware(
 # Include routers
 app.include_router(upload.router)
 app.include_router(extraction.router)
+app.include_router(feedback.router)
 
 
 @app.get("/")

@@ -26,7 +26,6 @@ class GCPClients:
     def get_credentials(cls) -> Optional[service_account.Credentials]:
         """Get service account credentials from mounted secret if available"""
         if cls._credentials is None:
-            # Check if service account key is mounted as a secret
             key_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '/secrets/service-account-key.json')
             if os.path.exists(key_path):
                 try:
@@ -84,3 +83,9 @@ def get_documentai_client() -> documentai.DocumentProcessorServiceClient:
 
 def get_tasks_client() -> tasks_v2.CloudTasksClient:
     return GCPClients.get_tasks_client()
+
+
+def get_firestore_service():
+    """Dependency for FirestoreService"""
+    from app.services.firestore_service import FirestoreService
+    return FirestoreService(get_firestore_client())

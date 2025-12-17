@@ -1,5 +1,31 @@
 import { ExtractionRequest, JobStatus, UploadResponse } from '@/types/api';
 
+interface FeedbackCorrection {
+  field: string;
+  originalValue: string;
+  correctedValue: string;
+  timestamp: string;
+}
+
+interface FeedbackResponse {
+  job_id: string;
+  corrections: FeedbackCorrection[];
+  user_id?: string;
+  session_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface FeedbackStats {
+  total_jobs: number;
+  jobs_with_feedback: number;
+  total_corrections: number;
+  common_fields: Array<{
+    field: string;
+    correction_count: number;
+  }>;
+}
+
 // Get API configuration from environment variables
 // In production, these MUST be set at build time via build args
 const getAPIURL = (): string => {
@@ -76,6 +102,16 @@ class APIClient {
     });
   }
 
+  async createAgenticExtractionJob(request: ExtractionRequest): Promise<JobStatus> {
+    return this.fetch('/api/extract/agentic', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+  }
+
   async getJobStatus(jobId: string): Promise<JobStatus> {
     return this.fetch(`/api/extract/${jobId}`);
   }
@@ -86,6 +122,29 @@ class APIClient {
       throw new Error(`Download failed: ${response.statusText}`);
     }
     return response.blob();
+  }
+
+  async submitFeedback(jobId: string, corrections: FeedbackCorrection[], userId?: string, sessionId?: string): Promise<FeedbackResponse> {
+    return this.fetch('/api/v1/feedback/corrections', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        job_id: jobId,
+        corrections,
+        user_id: userId,
+        session_id: sessionId,
+      }),
+    });
+  }
+
+  async getFeedback(jobId: string): Promise<FeedbackResponse> {
+    return this.fetch(`/api/v1/feedback/corrections/${jobId}`);
+  }
+
+  async getFeedbackStats(): Promise<FeedbackStats> {
+    return this.fetch('/api/v1/feedback/stats');
   }
 }
 

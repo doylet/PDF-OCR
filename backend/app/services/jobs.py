@@ -3,7 +3,7 @@ from app.config import get_settings
 from app.dependencies import get_firestore_client
 from app.models import JobStatus
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class JobService:
         self.db = get_firestore_client()
         self.collection = settings.firestore_collection
     
-    def create_job(self, job_id: str, pdf_id: str, regions_count: int, request_data: Optional[dict] = None) -> JobStatus:
+    def create_job(self, job_id: str, pdf_id: str, regions_count: int, request_data: Optional[dict] = None, output_format: str = "csv") -> JobStatus:
         """Create a new extraction job"""
         now = datetime.utcnow()
         job_data = {
@@ -28,7 +28,9 @@ class JobService:
             "pdf_id": pdf_id,
             "regions_count": regions_count,
             "result_url": None,
-            "error_message": None
+            "error_message": None,
+            "debug_graph_url": None,
+            "output_format": output_format
         }
         
         # Store request data for Cloud Tasks processing
@@ -49,7 +51,7 @@ class JobService:
         
         return JobStatus(**doc.to_dict())
     
-    def update_job_status(self, job_id: str, status: str, result_url: Optional[str] = None, error_message: Optional[str] = None):
+    def update_job_status(self, job_id: str, status: str, result_url: Optional[str] = None, error_message: Optional[str] = None, debug_graph_url: Optional[str] = None, approved_regions: Optional[List[dict]] = None):
         """Update job status"""
         update_data = {
             "status": status,
@@ -61,6 +63,12 @@ class JobService:
         
         if error_message:
             update_data["error_message"] = error_message
+        
+        if debug_graph_url:
+            update_data["debug_graph_url"] = debug_graph_url
+        
+        if approved_regions is not None:
+            update_data["approved_regions"] = approved_regions
         
         self.db.collection(self.collection).document(job_id).update(update_data)
         logger.info(f"Updated job {job_id} to status: {status}")

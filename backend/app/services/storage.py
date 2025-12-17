@@ -64,13 +64,24 @@ class StorageService:
         blob = self.get_pdf_blob(pdf_id)
         return blob.download_as_bytes()
     
-    def upload_result(self, job_id: str, content: str, format: str) -> str:
+    def upload_result(self, job_id: str, content: str, format: str, suffix: str = "") -> str:
         """Upload extraction result and return public URL"""
-        blob_name = f"{settings.gcs_results_folder}/{job_id}/result.{format}"
+        blob_name = f"{settings.gcs_results_folder}/{job_id}/result{suffix}.{format}"
         
         bucket = self.get_bucket()
         blob = bucket.blob(blob_name)
-        blob.upload_from_string(content, content_type=f"text/{format}")
+        
+        # Set appropriate content type
+        if format == "json":
+            content_type = "application/json"
+        elif format == "csv":
+            content_type = "text/csv"
+        elif format == "tsv":
+            content_type = "text/tab-separated-values"
+        else:
+            content_type = f"text/{format}"
+        
+        blob.upload_from_string(content, content_type=content_type)
         
         # Generate signed URL (valid for 7 days)
         result_url = blob.generate_signed_url(
@@ -79,7 +90,7 @@ class StorageService:
             method="GET"
         )
         
-        logger.info(f"Uploaded result for job: {job_id}")
+        logger.info(f"Uploaded result{suffix} for job: {job_id}")
         return result_url
     
     def upload_debug_artifact(self, job_id: str, artifact_name: str, content: bytes, content_type: str = "image/png") -> str:
