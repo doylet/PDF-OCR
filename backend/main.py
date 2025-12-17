@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import upload, extraction, feedback, documents, processing_runs, step_runs, claims
+from app.routers import upload, extraction, feedback, documents, processing_runs, step_runs, claims, document_profiles
 from app.config import get_settings
 import logging
 
@@ -36,6 +36,7 @@ app.add_middleware(
 # Include routers
 app.include_router(upload.router)
 app.include_router(documents.router)
+app.include_router(document_profiles.router)
 app.include_router(processing_runs.router)
 app.include_router(step_runs.router)
 app.include_router(claims.router)
