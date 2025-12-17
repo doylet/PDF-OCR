@@ -1,0 +1,333 @@
+openapi: 3.0.3
+info:
+  title: Data Hero - Claims API
+  description: |
+    Claims extraction and query API (Epic D).
+    
+    **Immutability Rule**: Claims are NEVER updated or deleted.
+    Reprocessing produces new Claims linked to new StepRuns.
+  version: 1.0.0
+servers:
+  - url: https://pdf-ocr-api-{project}.run.app/api
+    variables:
+      project:
+        default: prod
+
+paths:
+  /claims:
+    get:
+      summary: Query claims
+      description: |
+        Returns claims with filtering and pagination.
+        Supports querying by room, document, type, confidence threshold.
+      operationId: queryClaims
+      tags: [Claims]
+      parameters:
+        - name: room_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by room
+        - name: document_version_id
+          in: query
+          schema:
+            type: string
+          description: Filter by document version (SHA-256 hash)
+        - name: claim_type
+          in: query
+          schema:
+            type: string
+          description: Filter by claim type (text, number, date, table_cell)
+        - name: min_confidence
+          in: query
+          schema:
+            type: number
+            format: float
+            minimum: 0.0
+            maximum: 1.0
+            default: 0.0
+          description: Minimum confidence threshold
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: include_provenance
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include full StepRun and model version metadata
+      responses:
+        '200':
+          description: List of claims
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  claims:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Claim'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /claims/{claim_id}:
+    get:
+      summary: Get claim details
+      description: Returns single claim with full provenance metadata
+      operationId: getClaim
+      tags: [Claims]
+      parameters:
+        - name: claim_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Claim details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /claims/{claim_id}/feedback:
+    post:
+      summary: Submit claim feedback (HITL)
+      description: |
+        Records human-in-the-loop feedback for reinforcement learning.
+        Does NOT modify claim - feedback stored separately.
+      operationId: submitClaimFeedback
+      tags: [Claims]
+      parameters:
+        - name: claim_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedback_type]
+              properties:
+                feedback_type:
+                  type: string
+                  enum: [correct, incorrect, partially_correct]
+                corrected_value:
+                  type: string
+                  nullable: true
+                  description: User-provided correction (if feedback_type=incorrect)
+                notes:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedback_id:
+                    type: string
+                    format: uuid
+                  claim_id:
+                    type: string
+                    format: uuid
+                  feedback_type:
+                    type: string
+                  submitted_at:
+                    type: string
+                    format: date-time
+
+components:
+  schemas:
+    Claim:
+      type: object
+      required: [id, document_version_id, step_run_id, claim_type, value, confidence, page_number, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_version_id:
+          type: string
+          description: SHA-256 hash
+        room_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Nullable if claim pre-dates room assignment
+        step_run_id:
+          type: string
+          format: uuid
+          description: Which step produced this claim
+        claim_type:
+          type: string
+          enum: [text, number, date, table_cell, custom]
+        value:
+          type: string
+          example: "$45,123.00"
+        normalized_value:
+          type: string
+          nullable: true
+          example: "45123.00"
+          description: Optional normalized form
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.92
+        page_number:
+          type: integer
+          minimum: 1
+          example: 3
+        bbox:
+          $ref: '#/components/schemas/BBox'
+        source_text:
+          type: string
+          nullable: true
+          example: "Total Amount: $45,123.00"
+          description: OCR text from source span
+        created_at:
+          type: string
+          format: date-time
+
+    ClaimDetail:
+      allOf:
+        - $ref: '#/components/schemas/Claim'
+        - type: object
+          properties:
+            provenance:
+              $ref: '#/components/schemas/ClaimProvenance'
+              description: Full lineage metadata
+
+    ClaimProvenance:
+      type: object
+      description: Complete audit trail for claim
+      required: [step_run, document_version, processing_run]
+      properties:
+        step_run:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            step_name:
+              type: string
+              example: "claim_extraction"
+            model_version:
+              type: string
+              example: "gpt-4-turbo-2024-04-09"
+            idempotency_key:
+              type: string
+            completed_at:
+              type: string
+              format: date-time
+        processing_run:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [completed, failed]
+            started_at:
+              type: string
+              format: date-time
+            completed_at:
+              type: string
+              format: date-time
+        document_version:
+          type: object
+          properties:
+            id:
+              type: string
+              description: SHA-256 hash
+            original_filename:
+              type: string
+            file_size_bytes:
+              type: integer
+              format: int64
+            created_at:
+              type: string
+              format: date-time
+
+    BBox:
+      type: object
+      description: Bounding box in normalized coordinates (0-1)
+      required: [x, y, width, height]
+      properties:
+        x:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.123
+        y:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.456
+        width:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.2
+        height:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.05
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

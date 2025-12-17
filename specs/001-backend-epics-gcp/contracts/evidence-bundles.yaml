@@ -1,0 +1,276 @@
+openapi: 3.0.3
+info:
+  title: Data Hero - Evidence Bundles API
+  description: |
+    Evidence bundle query and retrieval API (Epic F).
+    
+    **Deterministic Ranking** (MVP):
+    - Relevance: TF-like keyword match count (no semantic embeddings)
+    - Confidence: Model confidence 0.0-1.0
+    - Recency: Newer claims preferred in ties
+    
+    Semantic ranking with embeddings deferred to future release.
+  version: 1.0.0
+servers:
+  - url: https://pdf-ocr-api-{project}.run.app/api
+    variables:
+      project:
+        default: prod
+
+paths:
+  /evidence-bundles:
+    post:
+      summary: Create evidence bundle
+      description: |
+        Queries room for relevant claims based on keywords.
+        Returns top N claims ranked by relevance, confidence, and recency.
+        
+        **Ranking Formula** (MVP):
+        1. Relevance score = COUNT(keyword matches in value + source_text)
+        2. ORDER BY relevance DESC, confidence DESC, created_at DESC
+        3. LIMIT max_results
+      operationId: createEvidenceBundle
+      tags: [EvidenceBundles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [room_id, query]
+              properties:
+                room_id:
+                  type: string
+                  format: uuid
+                  description: Room to query
+                query:
+                  type: string
+                  example: "What is the total amount?"
+                  description: Natural language query or keywords
+                keywords:
+                  type: array
+                  items:
+                    type: string
+                  example: ["total", "amount", "sum"]
+                  description: Optional explicit keywords (extracted from query if omitted)
+                min_confidence:
+                  type: number
+                  format: float
+                  minimum: 0.0
+                  maximum: 1.0
+                  default: 0.7
+                  description: Minimum claim confidence threshold
+                max_results:
+                  type: integer
+                  default: 50
+                  maximum: 200
+                  description: Maximum claims to return
+                include_source_spans:
+                  type: boolean
+                  default: true
+                  description: Include bounding boxes and source text
+      responses:
+        '200':
+          description: Evidence bundle created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceBundle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    EvidenceBundle:
+      type: object
+      required: [bundle_id, room_id, query, claims, created_at, ranking_version]
+      properties:
+        bundle_id:
+          type: string
+          format: uuid
+          description: Unique bundle identifier (for caching/replay)
+        room_id:
+          type: string
+          format: uuid
+        query:
+          type: string
+          example: "What is the total amount?"
+        keywords:
+          type: array
+          items:
+            type: string
+          example: ["total", "amount"]
+          description: Keywords used for ranking
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankedClaim'
+          description: Claims ordered by relevance
+        total_claims_found:
+          type: integer
+          description: Total matching claims before limit
+        total_claims_returned:
+          type: integer
+          description: Claims returned (after limit)
+        created_at:
+          type: string
+          format: date-time
+        ranking_version:
+          type: string
+          example: "keyword-tf-v1"
+          description: Ranking algorithm version for reproducibility
+
+    RankedClaim:
+      type: object
+      required: [claim, relevance_score]
+      properties:
+        claim:
+          $ref: '#/components/schemas/EvidenceClaim'
+        relevance_score:
+          type: number
+          format: float
+          minimum: 0.0
+          example: 2.0
+          description: Keyword match count (higher = more relevant)
+        rank:
+          type: integer
+          minimum: 1
+          example: 1
+          description: Position in ranked results
+
+    EvidenceClaim:
+      type: object
+      description: Claim with full provenance for LLM consumption
+      required: [id, value, confidence, provenance]
+      properties:
+        id:
+          type: string
+          format: uuid
+        claim_type:
+          type: string
+          enum: [text, number, date, table_cell, custom]
+        value:
+          type: string
+          example: "$45,123.00"
+        normalized_value:
+          type: string
+          nullable: true
+          example: "45123.00"
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.92
+        source_span:
+          $ref: '#/components/schemas/SourceSpan'
+          description: Evidence location in document
+        provenance:
+          $ref: '#/components/schemas/ProvenanceMetadata'
+          description: Complete audit trail
+
+    SourceSpan:
+      type: object
+      required: [document_version_id, page_number, bbox]
+      properties:
+        document_version_id:
+          type: string
+          description: SHA-256 hash
+        document_filename:
+          type: string
+          example: "bank_statement_q4.pdf"
+        page_number:
+          type: integer
+          minimum: 1
+          example: 3
+        bbox:
+          $ref: '#/components/schemas/BBox'
+        source_text:
+          type: string
+          nullable: true
+          example: "Total Amount: $45,123.00"
+
+    ProvenanceMetadata:
+      type: object
+      description: Audit trail for LLM synthesis
+      required: [step_run, model_version, extracted_at]
+      properties:
+        step_run:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            step_name:
+              type: string
+              example: "claim_extraction"
+            idempotency_key:
+              type: string
+        model_version:
+          type: string
+          example: "gpt-4-turbo-2024-04-09"
+          description: Model that produced this claim
+        extracted_at:
+          type: string
+          format: date-time
+        processing_run_id:
+          type: string
+          format: uuid
+
+    BBox:
+      type: object
+      description: Bounding box in normalized coordinates (0-1)
+      required: [x, y, width, height]
+      properties:
+        x:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        y:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        width:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        height:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
