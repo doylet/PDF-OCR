@@ -499,7 +499,7 @@ export default function Home() {
               {/* Regions List - showing detected regions for current page */}
               <Card>
                 <CardHeader title={`Regions on Page ${currentPage}`} />
-                  <div className="p-3">
+                <CardContent>
                     {(() => {
                       const pageRegions = detectedRegions.filter(r => r.page === currentPage);
                       
@@ -561,7 +561,7 @@ export default function Home() {
                         </div>
                       );
                     })()}
-                  </div>
+                  </CardContent>
                 </Card>
 
               {/* Job Status */}
