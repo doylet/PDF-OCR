@@ -5,7 +5,9 @@ import dynamic from "next/dynamic";
 import { Region, JobStatus, DetectedRegion } from "@/types/api";
 import { apiClient } from "@/lib/api-client";
 import { cn, theme } from "@/lib/theme";
-import { Button, Card, CardHeader, CardContent, FileUpload, FileInfo, RegionItem, StatusIndicator } from "@/components/ui";
+import { Button, Card, CardHeader, CardContent } from "@/components/ui";
+import { FileUpload, FileInfo, StatusIndicator } from "@/components/processing";
+import { RegionItem } from "@/components/pdf";
 
 import {
   FileText,
@@ -20,7 +22,7 @@ import {
 } from "lucide-react";
 
 // Dynamically import PDFViewer to avoid SSR issues
-const PDFViewer = dynamic(() => import("@/components/PDFViewer"), {
+const PDFViewer = dynamic(() => import("@/components/pdf/PDFViewer"), {
   ssr: false,
   loading: () => (
     <div

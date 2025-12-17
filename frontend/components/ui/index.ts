@@ -1,10 +1,4 @@
 export { Button } from './Button';
 export { Card, CardHeader, CardContent } from './Card';
 export { Badge } from './Badge';
-export { FileUpload, FileInfo } from './FileUpload';
-export { ProgressBar, StatusIndicator } from './StatusIndicator';
-export { RegionItem } from './RegionItem';
-export { ZoomControls } from './ZoomControls';
-export { PageNavigation } from './PageNavigation';
-export { ThumbnailStrip } from './ThumbnailStrip';
 export { EmptyState } from './EmptyState';
