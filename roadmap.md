@@ -336,7 +336,3 @@ To stay MVP-fast and Data Hero-aligned:
 * Don’t build a full graph database yet
 * Don’t do LLM synthesis until EvidenceBundles are real
 * Don’t chase perfect table extraction—Claims + provenance first
-
----
-
-If you want, I can turn the above into a **GitHub Issues-ready backlog** (titles + acceptance criteria + definition of done) and a **repo-level diff plan** (“create these files, modify these functions”) so you can execute it step-by-step.

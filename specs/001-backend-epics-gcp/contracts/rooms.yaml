@@ -1,0 +1,405 @@
+openapi: 3.0.3
+info:
+  title: Data Hero - Rooms API
+  description: |
+    Multi-document workspace management API (Epic E).
+    
+    Rooms represent decision contexts (loan application, compliance audit).
+    Documents are associated via junction table allowing many-to-many relationships.
+  version: 1.0.0
+servers:
+  - url: https://pdf-ocr-api-{project}.run.app/api
+    variables:
+      project:
+        default: prod
+
+paths:
+  /rooms:
+    get:
+      summary: List rooms
+      description: Returns all rooms for authenticated user
+      operationId: listRooms
+      tags: [Rooms]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived, deleted]
+          description: Filter by room status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of rooms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rooms:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Room'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+    post:
+      summary: Create room
+      description: Creates new multi-document workspace
+      operationId: createRoom
+      tags: [Rooms]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: "Acme Corp Loan Application"
+                description:
+                  type: string
+                  example: "Q4 2025 commercial loan review"
+                set_template_id:
+                  type: string
+                  format: uuid
+                  description: Optional SetTemplate for completeness validation
+      responses:
+        '201':
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /rooms/{room_id}:
+    get:
+      summary: Get room details
+      description: Returns room metadata with associated documents
+      operationId: getRoom
+      tags: [Rooms]
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: Room details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update room
+      description: Updates room metadata (name, description, set_template_id)
+      operationId: updateRoom
+      tags: [Rooms]
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                set_template_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '200':
+          description: Room updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete room
+      description: Soft deletes room (status='deleted'). Documents and claims preserved.
+      operationId: deleteRoom
+      tags: [Rooms]
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '204':
+          description: Room deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rooms/{room_id}/documents:
+    get:
+      summary: List room documents
+      description: Returns all documents associated with this room
+      operationId: listRoomDocuments
+      tags: [Rooms]
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoomDocument'
+
+    post:
+      summary: Add document to room
+      description: Associates existing document version with room (many-to-many)
+      operationId: addDocumentToRoom
+      tags: [Rooms]
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [document_version_id]
+              properties:
+                document_version_id:
+                  type: string
+                  description: SHA-256 hash
+      responses:
+        '201':
+          description: Document added to room
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room_id:
+                    type: string
+                    format: uuid
+                  document_version_id:
+                    type: string
+                  added_at:
+                    type: string
+                    format: date-time
+        '400':
+          description: Document already in room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /rooms/{room_id}/documents/{document_version_id}:
+    delete:
+      summary: Remove document from room
+      description: Removes association (does NOT delete document or claims)
+      operationId: removeDocumentFromRoom
+      tags: [Rooms]
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+        - name: document_version_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Document removed from room
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /rooms/{room_id}/completeness:
+    get:
+      summary: Get set completeness status
+      description: |
+        Evaluates room against SetTemplate (if configured).
+        Returns percentage complete and missing document roles.
+      operationId: getRoomCompleteness
+      tags: [Rooms]
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: Completeness evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetCompletenessStatus'
+        '404':
+          description: Room not found or no SetTemplate configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    RoomId:
+      name: room_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Room:
+      type: object
+      required: [id, name, created_at, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Acme Corp Loan Application"
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived, deleted]
+        set_template_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_by_user_id:
+          type: string
+
+    RoomDetail:
+      allOf:
+        - $ref: '#/components/schemas/Room'
+        - type: object
+          properties:
+            documents:
+              type: array
+              items:
+                $ref: '#/components/schemas/RoomDocument'
+            completeness:
+              $ref: '#/components/schemas/SetCompletenessStatus'
+              nullable: true
+              description: Present if SetTemplate configured
+
+    RoomDocument:
+      type: object
+      required: [document_version_id, document_id, name, added_at]
+      properties:
+        document_version_id:
+          type: string
+          description: SHA-256 hash
+        document_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Bank Statement Q4"
+        original_filename:
+          type: string
+          example: "chase_q4_2025.pdf"
+        document_role:
+          type: string
+          nullable: true
+          example: "bank_statement"
+          description: Classified role (from DocumentProfile)
+        added_at:
+          type: string
+          format: date-time
+        added_by_user_id:
+          type: string
+          nullable: true
+
+    SetCompletenessStatus:
+      type: object
+      required: [room_id, percentage_complete, evaluated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        room_id:
+          type: string
+          format: uuid
+        set_template_id:
+          type: string
+          format: uuid
+        percentage_complete:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 100.0
+          example: 66.67
+        missing_roles:
+          type: array
+          items:
+            type: string
+          example: ["bank_statement", "invoice"]
+        present_roles:
+          type: array
+          items:
+            type: string
+          example: ["ledger"]
+        evaluated_at:
+          type: string
+          format: date-time
+        evaluator_version:
+          type: string
+          example: "rules-v1"
+          description: Classification logic version
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

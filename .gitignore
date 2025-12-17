@@ -43,3 +43,6 @@ tmp/
 temp/
 *.tmp
 pdf-ocr-service-key.json
+
+# Secrets
+backend/secrets/

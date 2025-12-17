@@ -2,6 +2,14 @@
 
 A complete MVP for extracting structured data from PDF regions using GCP Document AI.
 
+## Documentation
+
+📖 **[Full Documentation](docs/)** - Architecture, guides, and specifications
+- [Architecture](docs/architecture/) - System design and implementation details
+- [Setup Guides](docs/guides/) - Quickstart, deployment, and CI/CD setup
+- [Roadmap](roadmap.md) - Product roadmap and feature planning
+- [Feature Specs](specs/) - Detailed feature specifications and implementation plans
+
 ## Architecture
 
 - **Frontend**: Next.js 14+ with PDF.js for rendering and canvas-based region selection

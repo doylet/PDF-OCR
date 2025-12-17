@@ -1,0 +1,312 @@
+openapi: 3.0.3
+info:
+  title: Data Hero - Processing Runs API
+  description: |
+    ProcessingRun and StepRun management API (Epic B).
+    
+    **State Machine**: ProcessingRuns transition through pending → running → completed/failed.
+    **Idempotency**: All steps check idempotency keys before execution.
+  version: 1.0.0
+servers:
+  - url: https://pdf-ocr-api-{project}.run.app/api
+    variables:
+      project:
+        default: prod
+
+paths:
+  /processing-runs:
+    post:
+      summary: Start processing run
+      description: |
+        Creates a new ProcessingRun for async extraction.
+        Returns immediately with run_id for status polling.
+        
+        **Hybrid Model** (Arch Decision Q1:C):
+        - Profiling: Synchronous (done via POST /documents)
+        - Extraction: Asynchronous (via Cloud Tasks)
+      operationId: createProcessingRun
+      tags: [ProcessingRuns]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [document_version_id, run_type]
+              properties:
+                document_version_id:
+                  type: string
+                  description: SHA-256 hash
+                run_type:
+                  type: string
+                  enum: [extract, validate]
+                  description: "'profile' runs are synchronous via /documents endpoint"
+                parameters:
+                  type: object
+                  description: Optional parameters for processing steps
+                  example: {"confidence_threshold": 0.7}
+      responses:
+        '202':
+          description: Processing run accepted (async)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [run_id, status, created_at]
+                properties:
+                  run_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [pending]
+                  created_at:
+                    type: string
+                    format: date-time
+                  poll_url:
+                    type: string
+                    format: uri
+                    example: "/api/processing-runs/{run_id}"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /processing-runs/{run_id}:
+    get:
+      summary: Get processing run status
+      description: |
+        Returns current status and all step runs.
+        Frontend polls this endpoint for async job completion.
+      operationId: getProcessingRun
+      tags: [ProcessingRuns]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Processing run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessingRunDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /processing-runs/{run_id}/cancel:
+    post:
+      summary: Cancel processing run
+      description: |
+        Attempts to cancel running ProcessingRun.
+        In-progress steps may complete before cancellation takes effect.
+      operationId: cancelProcessingRun
+      tags: [ProcessingRuns]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [cancelled]
+        '400':
+          description: Cannot cancel (already completed/failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /step-runs/{step_run_id}:
+    get:
+      summary: Get step run details
+      description: Returns individual step execution details with idempotency key
+      operationId: getStepRun
+      tags: [StepRuns]
+      parameters:
+        - name: step_run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Step run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepRun'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /step-runs/{step_run_id}/retry:
+    post:
+      summary: Retry failed step
+      description: |
+        Retries a failed_retryable step.
+        Uses same idempotency key - if step succeeded elsewhere, returns cached result.
+      operationId: retryStepRun
+      tags: [StepRuns]
+      parameters:
+        - name: step_run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Retry queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepRun'
+        '400':
+          description: Step not retryable (completed or failed_terminal)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ProcessingRunDetail:
+      type: object
+      required: [id, document_version_id, run_type, status, created_at, steps]
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_version_id:
+          type: string
+        run_type:
+          type: string
+          enum: [profile, extract, validate]
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+          description: Authoritative ProcessingRunState enum
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/StepRun'
+          description: All StepRuns for this ProcessingRun
+
+    StepRun:
+      type: object
+      required: [id, processing_run_id, step_name, idempotency_key, model_version, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        processing_run_id:
+          type: string
+          format: uuid
+        step_name:
+          type: string
+          example: "ocr"
+          description: Step identifier (ocr, layout_analysis, claim_extraction)
+        idempotency_key:
+          type: string
+          example: "d4e5f6..."
+          description: hash(doc_version + step + model + params)
+        model_version:
+          type: string
+          example: "document-ai-v1"
+          description: Model/tool version used
+        parameters_hash:
+          type: string
+          description: hash(JSON.stringify(params))
+        parameters:
+          type: object
+          nullable: true
+          description: Full parameters for replay
+        status:
+          type: string
+          enum: [pending, running, completed, failed_retryable, failed_terminal]
+          description: Authoritative StepRunState enum
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        output_artifact_gcs_uri:
+          type: string
+          format: uri
+          nullable: true
+          description: GCS path to step outputs
+        error_message:
+          type: string
+          nullable: true
+        retry_count:
+          type: integer
+          default: 0
+          description: Number of retries attempted
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

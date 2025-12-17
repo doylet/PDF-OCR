@@ -1,0 +1,342 @@
+openapi: 3.0.3
+info:
+  title: Data Hero - Documents API
+  description: |
+    Document management and versioning API (Epic A).
+    
+    **Boundary Rule**: User-facing operations reference `Document` entity.
+    Processing operations reference `DocumentVersion` entity only.
+  version: 1.0.0
+servers:
+  - url: https://pdf-ocr-api-{project}.run.app/api
+    description: Cloud Run deployment
+    variables:
+      project:
+        default: prod
+        enum: [prod, staging, dev]
+
+paths:
+  /documents:
+    post:
+      summary: Upload document and create version
+      description: |
+        Uploads a PDF document, computes SHA-256 hash, and creates immutable DocumentVersion.
+        If hash already exists, reuses existing DocumentVersion but creates new Document record.
+      operationId: uploadDocument
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, name]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file bytes
+                name:
+                  type: string
+                  description: User-provided document name
+                  example: "Q4 Bank Statement"
+                description:
+                  type: string
+                  description: Optional description
+                  example: "Chase account ending 1234"
+                room_id:
+                  type: string
+                  format: uuid
+                  description: Optional room to associate document with
+      responses:
+        '201':
+          description: Document created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCreatedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /documents/{document_id}:
+    get:
+      summary: Get document metadata
+      description: Returns user-facing document entity (not content)
+      operationId: getDocument
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update document metadata
+      description: Updates user-facing metadata (name, description). Does NOT modify content.
+      operationId: updateDocument
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Q4 Bank Statement (Corrected)"
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Document updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete document
+      description: Soft deletes document (status='deleted'). DocumentVersion and Claims preserved for audit.
+      operationId: deleteDocument
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '204':
+          description: Document deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /documents/{document_id}/versions:
+    get:
+      summary: List document versions
+      description: Returns all versions (content hashes) for this document
+      operationId: listDocumentVersions
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: List of versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentVersion'
+
+  /document-versions/{version_id}:
+    get:
+      summary: Get document version details
+      description: Returns immutable content reference (GCS URI, hash, file size)
+      operationId: getDocumentVersion
+      tags: [Documents]
+      parameters:
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: SHA-256 hash
+            example: "a7f3c...9d2e1"
+      responses:
+        '200':
+          description: Version details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    DocumentId:
+      name: document_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Document UUID
+
+  schemas:
+    DocumentCreatedResponse:
+      type: object
+      required: [document_id, document_version_id, is_duplicate, upload_url]
+      properties:
+        document_id:
+          type: string
+          format: uuid
+          description: Newly created Document ID
+        document_version_id:
+          type: string
+          description: SHA-256 hash (may be existing if duplicate)
+          example: "a7f3c4d...9d2e1"
+        is_duplicate:
+          type: boolean
+          description: True if DocumentVersion already existed (deduplication occurred)
+        upload_url:
+          type: string
+          format: uri
+          description: Signed GCS URL for uploading file bytes (valid 1 hour)
+        profile:
+          $ref: '#/components/schemas/DocumentProfile'
+          description: Profiling result (if synchronous profiling enabled)
+
+    Document:
+      type: object
+      required: [id, name, uploaded_by_user_id, created_at, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Q4 Bank Statement"
+        description:
+          type: string
+          nullable: true
+        uploaded_by_user_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [active, deleted]
+        metadata:
+          type: object
+          nullable: true
+          description: Optional user-defined JSON metadata
+
+    DocumentVersion:
+      type: object
+      required: [id, document_id, file_size_bytes, gcs_uri, mime_type, original_filename, created_at]
+      properties:
+        id:
+          type: string
+          description: SHA-256 hash of document bytes
+          example: "a7f3c4d...9d2e1"
+        document_id:
+          type: string
+          format: uuid
+        file_size_bytes:
+          type: integer
+          format: int64
+          example: 524288
+        gcs_uri:
+          type: string
+          format: uri
+          example: "gs://data-hero-docs/documents/a7f3c.../original.pdf"
+        mime_type:
+          type: string
+          example: "application/pdf"
+        original_filename:
+          type: string
+          example: "bank_statement_q4.pdf"
+        created_at:
+          type: string
+          format: date-time
+
+    DocumentProfile:
+      type: object
+      description: Document quality and structure metadata (Epic C)
+      required: [id, document_version_id, page_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_version_id:
+          type: string
+        page_count:
+          type: integer
+          example: 12
+        file_size_bytes:
+          type: integer
+          format: int64
+        is_born_digital:
+          type: boolean
+          nullable: true
+        quality_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          nullable: true
+        has_tables:
+          type: boolean
+        table_count:
+          type: integer
+        skew_detected:
+          type: boolean
+        max_skew_angle_degrees:
+          type: number
+          format: float
+          nullable: true
+        document_role:
+          type: string
+          nullable: true
+          example: "bank_statement"
+        profile_artifact_gcs_uri:
+          type: string
+          format: uri
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: "not_found"
+        message:
+          type: string
+          example: "Document not found"
+        details:
+          type: object
+          nullable: true
