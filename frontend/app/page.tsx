@@ -24,10 +24,15 @@ const PDFViewer = dynamic(() => import("@/components/PDFViewer"), {
   ssr: false,
   loading: () => (
     <div
-      className="bg-slate-900 rounded-lg border border-slate-700 flex items-center justify-center"
+      className={cn(
+        theme.colors.background.secondary,
+        theme.radius.lg,
+        theme.colors.border.primary,
+        'border flex items-center justify-center'
+      )}
       style={{ minHeight: "700px" }}
     >
-      <Loader2 className="text-slate-600 animate-spin" size={40} />
+      <Loader2 className={theme.colors.text.disabled + ' animate-spin'} size={40} />
     </div>
   ),
 });
@@ -400,35 +405,53 @@ export default function Home() {
             <FileUpload onFileSelect={handleFileChange} isUploading={isUploading} />
 
             <div className="grid md:grid-cols-2 gap-4 mt-8">
-              <div className="bg-slate-900/30 border border-slate-800 rounded-lg p-6">
-                <div className="w-10 h-10 bg-blue-500/20 border border-blue-500/30 rounded-lg flex items-center justify-center mb-4">
-                  <Sparkles className="text-blue-400" size={20} />
+              <Card variant="overlay" className="p-6">
+                <div className={cn(
+                  'w-10 h-10 mb-4',
+                  'bg-blue-500/20 border border-blue-500/30',
+                  theme.radius.lg,
+                  'flex items-center justify-center'
+                )}>
+                  <Sparkles className={theme.colors.accent.blue} size={20} />
                 </div>
-                <h3 className="text-white font-semibold mb-2">AI Agent Mode</h3>
-                <p className="text-sm text-slate-400">
+                <h3 className={cn(theme.colors.text.primary, 'font-semibold mb-2')}>AI Agent Mode</h3>
+                <p className={cn('text-sm', theme.colors.text.muted)}>
                   Automatically detect and extract tables, forms, and structured
                   data using advanced AI
                 </p>
-              </div>
+              </Card>
 
-              <div className="bg-slate-900/30 border border-slate-800 rounded-lg p-6">
-                <div className="w-10 h-10 bg-slate-700/50 border border-slate-600 rounded-lg flex items-center justify-center mb-4">
-                  <Grid3x3 className="text-slate-400" size={20} />
+              <Card variant="overlay" className="p-6">
+                <div className={cn(
+                  'w-10 h-10 mb-4',
+                  theme.colors.background.tertiary + '/50',
+                  theme.colors.border.muted,
+                  'border',
+                  theme.radius.lg,
+                  'flex items-center justify-center'
+                )}>
+                  <Grid3x3 className={theme.colors.text.muted} size={20} />
                 </div>
-                <h3 className="text-white font-semibold mb-2">
+                <h3 className={cn(theme.colors.text.primary, 'font-semibold mb-2')}>
                   Manual Selection
                 </h3>
-                <p className="text-sm text-slate-400">
+                <p className={cn('text-sm', theme.colors.text.muted)}>
                   Precisely control extraction by selecting specific regions in
                   your document
                 </p>
-              </div>
+              </Card>
             </div>
           </div>
         ) : (
           <div className="flex gap-6 h-[calc(100vh-140px)]">
             {/* Left: PDF Viewer - 2/3 width */}
-            <div className="flex-[2] bg-slate-900 border border-slate-800 rounded-lg overflow-hidden min-w-0">
+            <div className={cn(
+              'flex-[2] overflow-hidden min-w-0',
+              theme.colors.background.secondary,
+              theme.colors.border.secondary,
+              'border',
+              theme.radius.lg
+            )}>
               <PDFViewer
                 file={file}
                 onRegionAdd={handleRegionAdd}

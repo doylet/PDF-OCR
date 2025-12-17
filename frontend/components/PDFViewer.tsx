@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Region } from "@/types/api";
 import { FileText } from "lucide-react";
+import { cn, theme } from "@/lib/theme";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -692,8 +693,14 @@ export default function PDFViewer({
 
   if (!file) {
     return (
-      <div className="flex-1 bg-slate-900 rounded-lg border border-slate-700 p-8">
-        <div className="text-center text-slate-400">
+      <div className={cn(
+        'flex-1 p-8',
+        theme.colors.background.secondary,
+        theme.radius.lg,
+        theme.colors.border.primary,
+        'border'
+      )}>
+        <div className={cn('text-center', theme.colors.text.muted)}>
           <FileText className="mx-auto mb-4" size={64} />
           <p>No PDF loaded</p>
         </div>
@@ -705,7 +712,13 @@ export default function PDFViewer({
     <div className="flex gap-3 h-full">
       {/* Thumbnail Strip */}
       <div
-        className="w-24 bg-slate-900/50 border border-slate-700 rounded-lg p-2 overflow-y-auto"
+        className={cn(
+          'w-24 p-2 overflow-y-auto',
+          theme.colors.background.overlay,
+          theme.colors.border.primary,
+          'border',
+          theme.radius.lg
+        )}
         style={{ maxHeight: "700px" }}
       >
         <div className="space-y-2">
@@ -713,13 +726,19 @@ export default function PDFViewer({
             <button
               key={pageNum}
               onClick={() => onPageChange(pageNum)}
-              className={`w-full aspect-[8.5/11] rounded border-2 transition-all relative group overflow-hidden ${
+              className={cn(
+                'w-full aspect-[8.5/11] border-2 relative group overflow-hidden',
+                theme.radius.sm,
+                theme.transitions.all,
                 currentPage === pageNum
-                  ? "border-blue-500 bg-blue-500/10"
-                  : "border-slate-600 hover:border-slate-500 bg-slate-800/50"
-              }`}
+                  ? 'border-blue-500 bg-blue-500/10'
+                  : cn(theme.colors.border.muted, 'hover:border-slate-500', theme.colors.background.tertiary + '/50')
+              )}
             >
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-800 overflow-hidden">
+              <div className={cn(
+                'absolute inset-0 flex items-center justify-center overflow-hidden',
+                theme.colors.background.tertiary
+              )}>
                 {blobUrl && numPages > 0 ? (
                   <Document file={blobUrl} key={`thumb-${pageNum}`}>
                     <Page
@@ -732,17 +751,18 @@ export default function PDFViewer({
                   </Document>
                 ) : (
                   <FileText
-                    className={`${
-                      currentPage === pageNum ? "text-blue-400" : "text-slate-600"
-                    }`}
+                    className={currentPage === pageNum ? theme.colors.accent.blue : theme.colors.text.disabled}
                     size={20}
                   />
                 )}
               </div>
               <div
-                className={`absolute bottom-1 left-0 right-0 text-center text-[10px] font-medium bg-slate-900/80 backdrop-blur-sm py-0.5 z-10 ${
-                  currentPage === pageNum ? "text-blue-400" : "text-slate-300"
-                }`}
+                className={cn(
+                  'absolute bottom-1 left-0 right-0 text-center text-[10px] font-medium py-0.5 z-10',
+                  theme.colors.background.secondary + '/80',
+                  theme.effects.backdropBlur,
+                  currentPage === pageNum ? theme.colors.accent.blue : theme.colors.text.tertiary
+                )}
               >
                 {pageNum}
               </div>
@@ -753,7 +773,13 @@ export default function PDFViewer({
 
       {/* Main PDF Viewer */}
       <div
-        className="flex-1 bg-slate-900 rounded-lg border border-slate-700 relative overflow-hidden"
+        className={cn(
+          'flex-1 relative overflow-hidden',
+          theme.colors.background.secondary,
+          theme.radius.lg,
+          theme.colors.border.primary,
+          'border'
+        )}
         style={{ minHeight: "700px" }}
       >
         <div
@@ -814,39 +840,82 @@ export default function PDFViewer({
         </div>
 
         {/* Zoom Controls */}
-        <div className="absolute top-4 right-4 bg-slate-800/95 backdrop-blur-sm rounded-lg border border-slate-600 shadow-lg z-30 flex flex-col gap-1 p-2">
+        <div className={cn(
+          'absolute top-4 right-4 p-2 z-30 flex flex-col gap-1',
+          theme.colors.background.overlayStrong,
+          theme.effects.backdropBlur,
+          theme.radius.lg,
+          theme.colors.border.muted,
+          'border',
+          theme.shadow.lg
+        )}>
           <button
             onClick={() => setZoomLevel(prev => Math.min(prev + 0.2, 3.0))}
-            className="px-2 py-1 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition"
+            className={cn(
+              'px-2 py-1 text-xs font-bold',
+              theme.colors.text.tertiary,
+              'hover:text-white',
+              theme.colors.background.hover,
+              theme.radius.sm,
+              theme.transitions.default
+            )}
             title="Zoom In"
           >
             +
           </button>
           <button
             onClick={() => setZoomLevel(1.0)}
-            className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700 rounded transition"
+            className={cn(
+              'px-2 py-1 text-xs font-medium',
+              theme.colors.text.muted,
+              'hover:text-white',
+              theme.colors.background.hover,
+              theme.radius.sm,
+              theme.transitions.default
+            )}
             title="Reset Zoom"
           >
             {Math.round(zoomLevel * 100)}%
           </button>
           <button
             onClick={() => setZoomLevel(prev => Math.max(prev - 0.2, 0.5))}
-            className="px-2 py-1 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition"
+            className={cn(
+              'px-2 py-1 text-xs font-bold',
+              theme.colors.text.tertiary,
+              'hover:text-white',
+              theme.colors.background.hover,
+              theme.radius.sm,
+              theme.transitions.default
+            )}
             title="Zoom Out"
           >
             −
           </button>
-          <div className="border-t border-slate-600 my-1"></div>
+          <div className={cn('border-t my-1', theme.colors.border.muted)}></div>
           <button
             onClick={() => setPanOffset({ x: 0, y: 0 })}
-            className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700 rounded transition"
+            className={cn(
+              'px-2 py-1 text-xs font-medium',
+              theme.colors.text.muted,
+              'hover:text-white',
+              theme.colors.background.hover,
+              theme.radius.sm,
+              theme.transitions.default
+            )}
             title="Reset Pan"
           >
             ⊙
           </button>
           <button
             onClick={() => setShowHints(!showHints)}
-            className="px-2 py-1 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700 rounded transition"
+            className={cn(
+              'px-2 py-1 text-xs font-medium',
+              theme.colors.text.muted,
+              'hover:text-white',
+              theme.colors.background.hover,
+              theme.radius.sm,
+              theme.transitions.default
+            )}
             title="Toggle Hints"
           >
             {showHints ? '👁' : '👁‍🗨'}
@@ -857,8 +926,15 @@ export default function PDFViewer({
         {showHints && editedRegions.length > 0 && (() => {
           const currentPageRegions = editedRegions.filter((r) => r.page === currentPage);
           return (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800/95 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-600 z-10">
-            <div className="text-xs text-slate-300">
+          <div className={cn(
+            'absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 z-10',
+            theme.colors.background.overlayStrong,
+            theme.effects.backdropBlur,
+            theme.radius.lg,
+            theme.colors.border.muted,
+            'border'
+          )}>
+            <div className={cn('text-xs', theme.colors.text.tertiary)}>
               <span className="font-semibold text-emerald-400">{currentPageRegions.length}</span>{" "}
               {currentPageRegions.length === 1 ? 'region' : 'regions'} detected on page {currentPage}
             </div>
@@ -868,8 +944,15 @@ export default function PDFViewer({
 
         {/* Drawing hint - positioned to avoid overlap */}
         {showHints && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-slate-800/90 backdrop-blur-sm px-3 py-2 rounded-md border border-slate-600 z-10">
-            <p className="text-xs text-slate-300">
+          <div className={cn(
+            'absolute bottom-20 left-1/2 -translate-x-1/2 px-3 py-2 z-10',
+            theme.colors.background.secondary + '/90',
+            theme.effects.backdropBlur,
+            theme.radius.md,
+            theme.colors.border.muted,
+            'border'
+          )}>
+            <p className={cn('text-xs', theme.colors.text.tertiary)}>
               {selectedRegion 
                 ? 'Edit region: drag to move, resize handles, or delete' 
                 : 'Click to edit • Cmd/Ctrl+Click extraction • Shift+Drag to pan'}
@@ -884,7 +967,15 @@ export default function PDFViewer({
           
           return (
             <div 
-              className="absolute bg-slate-800/95 backdrop-blur-sm rounded-lg border border-slate-600 shadow-lg z-20"
+              className={cn(
+                'absolute z-20',
+                theme.colors.background.overlayStrong,
+                theme.effects.backdropBlur,
+                theme.radius.lg,
+                theme.colors.border.muted,
+                'border',
+                theme.shadow.lg
+              )}
               style={{ 
                 right: `${16 - controlsPosition.x}px`, 
                 top: `${controlsPosition.y}px`,
@@ -903,7 +994,12 @@ export default function PDFViewer({
             >
               {/* Drag Handle */}
               <div 
-                className="drag-handle flex items-center justify-between px-3 py-2 border-b border-slate-600 cursor-move bg-slate-700/50"
+                className={cn(
+                  'drag-handle flex items-center justify-between px-3 py-2 cursor-move',
+                  'border-b',
+                  theme.colors.border.muted,
+                  theme.colors.background.tertiary + '/50'
+                )}
                 onMouseDown={(e) => {
                   setIsDraggingControls(true);
                   setDragOffset({
@@ -912,17 +1008,25 @@ export default function PDFViewer({
                   });
                 }}
               >
-                <span className="text-xs font-semibold text-slate-300">Region Controls</span>
+                <span className={cn('text-xs font-semibold', theme.colors.text.tertiary)}>Region Controls</span>
                 <div className="flex gap-1">
                   <button
                     onClick={() => setIsControlsMinimized(!isControlsMinimized)}
-                    className="px-1.5 text-xs text-slate-400 hover:text-white"
+                    className={cn(
+                      'px-1.5 text-xs',
+                      theme.colors.text.muted,
+                      'hover:text-white'
+                    )}
                   >
                     {isControlsMinimized ? '□' : '−'}
                   </button>
                   <button
                     onClick={() => { setSelectedRegion(null); if (onRegionSelected) onRegionSelected(null); }}
-                    className="px-1.5 text-xs text-slate-400 hover:text-white"
+                    className={cn(
+                      'px-1.5 text-xs',
+                      theme.colors.text.muted,
+                      'hover:text-white'
+                    )}
                   >
                     ×
                   </button>
@@ -932,41 +1036,56 @@ export default function PDFViewer({
               {!isControlsMinimized && (
                 <div className="px-4 py-3 space-y-2">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-medium text-slate-300">Region Type:</span>
+                <span className={cn('text-xs font-medium', theme.colors.text.tertiary)}>Region Type:</span>
                 <select
                   value={region.region_type}
                   onChange={(e) => handleRegionTypeChange(selectedRegion, e.target.value)}
-                  className="text-xs bg-slate-700 text-slate-200 border border-slate-600 rounded px-2 py-1 focus:outline-none focus:border-blue-500"
+                  className={cn(
+                    'text-xs px-2 py-1',
+                    theme.colors.background.tertiary,
+                    theme.colors.text.secondary,
+                    theme.colors.border.muted,
+                    'border',
+                    theme.radius.sm,
+                    'focus:outline-none',
+                    theme.colors.border.focus
+                  )}
                 >
                   <option value="TABLE">TABLE</option>
                   <option value="HEADING">HEADING</option>
                   <option value="LIST">LIST</option>
                   <option value="TEXT">TEXT</option>
-                  <option value="NONE" className="text-slate-500">NONE (False Positive)</option>
+                  <option value="NONE" className={theme.colors.text.subtle}>NONE (False Positive)</option>
                 </select>
               </div>
               
-              <div className="flex items-center gap-2 text-xs text-slate-400">
+              <div className={cn('flex items-center gap-2 text-xs', theme.colors.text.muted)}>
                 <span>Confidence:</span>
-                <span className="font-mono text-slate-300">{Math.round(region.confidence * 100)}%</span>
+                <span className={cn('font-mono', theme.colors.text.tertiary)}>{Math.round(region.confidence * 100)}%</span>
               </div>
               
-              <div className="flex items-center gap-2 text-xs text-slate-400">
+              <div className={cn('flex items-center gap-2 text-xs', theme.colors.text.muted)}>
                 <span>Size:</span>
-                <span className="font-mono text-slate-300">
+                <span className={cn('font-mono', theme.colors.text.tertiary)}>
                   {Math.round(region.bbox.w * 100)}% × {Math.round(region.bbox.h * 100)}%
                 </span>
               </div>
               
-              <div className="border-t border-slate-600 my-2 pt-2">
+              <div className={cn('border-t my-2 pt-2', theme.colors.border.muted)}>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={selectedForExtraction.has(selectedRegion)}
                     onChange={() => toggleExtractionSelection(selectedRegion)}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                    className={cn(
+                      'w-4 h-4',
+                      theme.radius.sm,
+                      theme.colors.border.muted,
+                      theme.colors.background.tertiary,
+                      'text-blue-500 focus:ring-blue-500 focus:ring-offset-0'
+                    )}
                   />
-                  <span className="text-xs text-slate-300 font-medium">
+                  <span className={cn('text-xs font-medium', theme.colors.text.tertiary)}>
                     Include in Extraction
                   </span>
                 </label>
@@ -974,7 +1093,13 @@ export default function PDFViewer({
               
               <button
                 onClick={() => handleRegionDelete(selectedRegion)}
-                className="w-full mt-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded transition flex items-center justify-center gap-1"
+                className={cn(
+                  'w-full mt-2 px-3 py-1.5 text-white text-xs font-medium flex items-center justify-center gap-1',
+                  theme.colors.accent.redBg,
+                  theme.colors.accent.redBgHover,
+                  theme.radius.sm,
+                  theme.transitions.default
+                )}
               >
                 <span>×</span>
                 Delete Region
@@ -992,23 +1117,52 @@ export default function PDFViewer({
           <button
             onClick={() => onPageChange(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
-            className="px-3 py-2 bg-slate-800/90 backdrop-blur-sm border border-slate-600 rounded-lg text-slate-300 hover:text-white hover:border-slate-500 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            className={cn(
+              'px-3 py-2 text-sm font-medium',
+              theme.colors.background.secondary + '/90',
+              theme.effects.backdropBlur,
+              theme.colors.border.muted,
+              'border',
+              theme.radius.lg,
+              theme.colors.text.tertiary,
+              'hover:text-white hover:border-slate-500',
+              theme.transitions.default,
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
           >
             ← Previous
           </button>
 
-          <div className="bg-slate-800/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-600">
-            <span className="text-slate-300 text-sm font-medium">
+          <div className={cn(
+            'px-4 py-2',
+            theme.colors.background.secondary + '/90',
+            theme.effects.backdropBlur,
+            theme.radius.lg,
+            theme.colors.border.muted,
+            'border'
+          )}>
+            <span className={cn('text-sm font-medium', theme.colors.text.tertiary)}>
               Page{" "}
-              <span className="text-white tabular-nums">{currentPage}</span> of{" "}
-              <span className="text-slate-400 tabular-nums">{numPages}</span>
+              <span className={cn('tabular-nums', theme.colors.text.primary)}>{currentPage}</span> of{" "}
+              <span className={cn('tabular-nums', theme.colors.text.muted)}>{numPages}</span>
             </span>
           </div>
 
           <button
             onClick={() => onPageChange(Math.min(numPages, currentPage + 1))}
             disabled={currentPage === numPages}
-            className="px-3 py-2 bg-slate-800/90 backdrop-blur-sm border border-slate-600 rounded-lg text-slate-300 hover:text-white hover:border-slate-500 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            className={cn(
+              'px-3 py-2 text-sm font-medium',
+              theme.colors.background.secondary + '/90',
+              theme.effects.backdropBlur,
+              theme.colors.border.muted,
+              'border',
+              theme.radius.lg,
+              theme.colors.text.tertiary,
+              'hover:text-white hover:border-slate-500',
+              theme.transitions.default,
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
           >
             Next →
           </button>
