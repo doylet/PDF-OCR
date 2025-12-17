@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
 
+from app.models.state_machines import ProcessingRunState
+
 
 class ClaimType(Enum):
     """Supported claim types."""
@@ -23,15 +25,6 @@ class ClaimType(Enum):
     MONETARY_AMOUNT = "monetary_amount"
     PERCENTAGE = "percentage"
     OTHER = "other"
-
-
-class ProcessingRunStatus(Enum):
-    """Processing run states."""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -166,7 +159,7 @@ class ProcessingRun:
     """
     id: str
     document_version_id: str
-    status: ProcessingRunStatus
+    status: ProcessingRunState
     config: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
@@ -177,25 +170,16 @@ class ProcessingRun:
     error_message: Optional[str] = None
     created_by_user_id: Optional[str] = None
     
-    def can_transition_to(self, new_status: ProcessingRunStatus) -> bool:
+    def can_transition_to(self, new_status: ProcessingRunState) -> bool:
         """Check if transition to new status is valid."""
-        valid_transitions = {
-            ProcessingRunStatus.PENDING: [ProcessingRunStatus.PROCESSING, ProcessingRunStatus.CANCELLED],
-            ProcessingRunStatus.PROCESSING: [ProcessingRunStatus.COMPLETED, ProcessingRunStatus.FAILED],
-            ProcessingRunStatus.COMPLETED: [],
-            ProcessingRunStatus.FAILED: [ProcessingRunStatus.PROCESSING],  # Allow retry
-            ProcessingRunStatus.CANCELLED: []
-        }
-        
-        return new_status in valid_transitions.get(self.status, [])
+        # Delegate to state machine validation
+        from app.models.state_machines import ProcessingRunState as PRS
+        valid_next = PRS.valid_transitions().get(self.status, set())
+        return new_status in valid_next
     
     def is_terminal(self) -> bool:
         """Check if run is in a terminal state."""
-        return self.status in [
-            ProcessingRunStatus.COMPLETED,
-            ProcessingRunStatus.FAILED,
-            ProcessingRunStatus.CANCELLED
-        ]
+        return ProcessingRunState.is_terminal(self.status)
     
     def duration_seconds(self) -> Optional[float]:
         """Calculate run duration in seconds."""
@@ -225,7 +209,7 @@ class ProcessingRun:
         return cls(
             id=data["id"],
             document_version_id=data["document_version_id"],
-            status=ProcessingRunStatus(data["status"]),
+            status=ProcessingRunState(data["status"]),
             config=data["config"],
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),

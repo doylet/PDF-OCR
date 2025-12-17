@@ -6,16 +6,17 @@ from .models import (
     Claim,
     ClaimType,
     ProcessingRun,
-    ProcessingRunStatus,
     Room,
     BoundingBox
 )
+from app.models.state_machines import ProcessingRunState, StepRunState
 
 __all__ = [
     "Claim",
     "ClaimType",
     "ProcessingRun",
-    "ProcessingRunStatus",
+    "ProcessingRunState",
+    "StepRunState",
     "Room",
     "BoundingBox"
 ]
