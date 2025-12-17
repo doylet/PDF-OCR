@@ -193,6 +193,8 @@ TABLE_DEFINITIONS = {
             bbox_width FLOAT64 NOT NULL,
             bbox_height FLOAT64 NOT NULL,
             source_text STRING,
+            user_feedback_json JSON,
+            metadata JSON,
             created_at TIMESTAMP NOT NULL
         )
         PARTITION BY DATE(created_at)
