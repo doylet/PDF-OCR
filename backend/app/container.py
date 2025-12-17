@@ -6,6 +6,9 @@ Makes testing easier and decouples components.
 """
 
 import os
+from app.config import get_settings
+
+settings = get_settings()
 
 
 class Container:
@@ -29,7 +32,6 @@ class Container:
         """Get or create BigQuery client."""
         if self._bigquery_client is None:
             from google.cloud import bigquery
-            from app.config import settings
             self._bigquery_client = bigquery.Client(
                 project=settings.GOOGLE_CLOUD_PROJECT
             )
@@ -40,9 +42,8 @@ class Container:
         """Get or create BigQuery service."""
         if self._bigquery is None:
             from app.services.bigquery import BigQuery
-            from app.config import settings
             self._bigquery = BigQuery(
-                client=self.bigquery_client,
+                bigquery_client=self.bigquery_client,
                 dataset_id=settings.BIGQUERY_DATASET
             )
         return self._bigquery

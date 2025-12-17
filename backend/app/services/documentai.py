@@ -170,12 +170,27 @@ class DocumentAI:
                     region.height
                 )
                 
-                if camelot_tables:
+                if (camelot_tables and 
+                    hasattr(camelot_tables, '__iter__') and 
+                    not isinstance(camelot_tables, str) and
+                    len(camelot_tables) > 0):
                     # Successfully extracted table with Camelot
                     logger.info(f"Camelot extracted {len(camelot_tables)} rows from region {idx}")
                     
-                    # Convert to text representation
-                    text = "\n".join(["\t".join(row) for row in camelot_tables])
+                    # Convert to text representation - ensure each row is also iterable
+                    text_rows = []
+                    # Ensure camelot_tables is iterable
+                    if hasattr(camelot_tables, '__iter__') and not isinstance(camelot_tables, str):
+                        for row in camelot_tables:
+                            if hasattr(row, '__iter__') and not isinstance(row, str):
+                                row_text = "\t".join(str(cell) for cell in row)
+                            else:
+                                row_text = str(row)
+                            text_rows.append(row_text)
+                    else:
+                        # If not iterable, treat as single item
+                        text_rows.append(str(camelot_tables))
+                    text = "\n".join(text_rows)
                     
                     result = ExtractionResult(
                         region_index=idx,

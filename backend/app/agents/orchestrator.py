@@ -39,7 +39,7 @@ class ExpertOrchestrator:
     # Retry limits
     MAX_RETRIES = 2
     
-    def __init__(self, pdf_path: str, job_id: str, llm_service: Optional[LLMService] = None):
+    def __init__(self, pdf_path: str, job_id: str, llm_service: Optional[LLM] = None):
         """
         Initialize orchestrator with a PDF.
         

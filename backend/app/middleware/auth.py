@@ -3,10 +3,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import logging
 
-from app.config import get_settings
+import app.config as config
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+settings = config.get_settings()
 
 security = HTTPBearer(auto_error=False)
 

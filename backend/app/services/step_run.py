@@ -28,7 +28,7 @@ class StepRun:
     def __init__(
         self,
         bigquery_client: bigquery.Client,
-        idempotency_service: IdempotencyService,
+        idempotency_service: Idempotency,
         dataset_id: str = "data_hero"
     ):
         self.client = bigquery_client

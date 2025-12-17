@@ -44,7 +44,7 @@ class ValidatorAgent:
     MIN_TABLE_ROWS = 1
     MAX_TABLE_ROWS = 10000
     
-    def __init__(self, llm_service: Optional[LLMService] = None):
+    def __init__(self, llm_service: Optional[LLM] = None):
         """
         Args:
             llm_service: Optional LLM service for semantic validation

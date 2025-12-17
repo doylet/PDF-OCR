@@ -14,7 +14,7 @@ from google.cloud import bigquery, documentai_v1 as documentai, storage
 from google.api_core.exceptions import NotFound
 
 from app.services.bigquery import BigQuery
-from app.services.documentai import get_document_ai_client
+from app.services.documentai import DocumentAI
 from app.services.storage import get_storage_client
 
 
@@ -28,7 +28,7 @@ class DocumentProfile:
     
     def __init__(self, bq_service: BigQuery):
         self.bq = bq_service
-        self.documentai_client = get_document_ai_client()
+        self.documentai_service = DocumentAI()
         self.storage_client = get_storage_client()
     
     def profile_document(

@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     
     # Cloud Tasks
     task_queue_name: str = "extraction-queue"
+    cloud_tasks_queue: str = "extraction-queue"
+    cloud_tasks_location: str = "us-central1"
+    worker_service_url: str = "http://localhost:8000"
     api_base_url: str = "https://pdf-ocr-api-785693222332.us-central1.run.app"
     
     # LLM Configuration (Google Gemini)
@@ -88,4 +91,6 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
+    """Get application settings"""
+
     return Settings()

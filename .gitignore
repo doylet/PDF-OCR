@@ -46,3 +46,4 @@ pdf-ocr-service-key.json
 
 # Secrets
 backend/secrets/
+pdf-ocr-local-key.json

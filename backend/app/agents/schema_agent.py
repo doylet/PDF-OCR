@@ -4,9 +4,9 @@ Schema Agent: Uses LLM to detect column meanings and data types.
 This agent is TRULY AGENTIC - it uses LLM reasoning instead of rules.
 """
 import logging
-from typing import List, Dict, Optional
+from typing import Dict
 from app.models.document_graph import Extraction
-from app.services.llm import LLM, LLMRole
+from app.services.llm import LLM
 
 logger = logging.getLogger(__name__)
 
@@ -30,19 +30,20 @@ class SchemaAgent:
             Schema dict with column meanings, types, and metadata
         """
         if not extraction.data or "rows" not in extraction.data:
-            logger.warning(f"No table data in extraction {extraction.extraction_id}")
+            logger.warning("No table data in extraction %s", extraction.extraction_id)
             return None
         
         table_data = extraction.data["rows"]
         if len(table_data) < 2:
-            logger.warning(f"Not enough rows for schema detection: {len(table_data)}")
+            logger.warning("Not enough rows for schema detection: %s", len(table_data))
             return None
-        
-        logger.info(f"Detecting schema for {extraction.extraction_id} "
-                   f"({len(table_data)} rows × {len(table_data[0])} cols)")
-        
+
+        logger.info("Detecting schema for %s (%s rows × %s cols)", 
+                   extraction.extraction_id, len(table_data), len(table_data[0]))
+
         # Call LLM for schema understanding
-        schema_result = LLM.detect_table_schema(
+        llm = LLM()
+        schema_result = llm.detect_table_schema(
             table_data=table_data,
             context=context or {}
         )
@@ -57,9 +58,10 @@ class SchemaAgent:
             "detected_by": "schema_agent_llm"
         }
         
-        logger.info(f"Schema detected: domain={schema['domain']}, "
-                   f"cols={[c['name'] for c in schema['columns']]}, "
-                   f"confidence={schema['confidence']:.2f}")
+        logger.info("Schema detected: domain=%s, cols=%s, confidence=%.2f",
+                   schema['domain'],
+                   [c['name'] for c in schema['columns']],
+                   schema['confidence'])
         
         return schema
     
@@ -83,6 +85,6 @@ class SchemaAgent:
             if "columns" in extraction.data:
                 extraction.data["columns"] = [c["name"] for c in schema["columns"]]
             
-            logger.info(f"Enriched {extraction.extraction_id} with schema")
+            logger.info("Enriched %s with schema", extraction.extraction_id)
         
         return extraction
