@@ -1,6 +1,32 @@
+"""
+FastAPI Application - PDF OCR Backend
+
+This application provides a comprehensive API for document processing, extraction,
+and analysis using GCP Document AI and BigQuery.
+
+Architecture:
+- Document versioning with SHA-256 deduplication
+- ProcessingRuns for tracking pipeline execution
+- Claims extraction with HITL feedback
+- Document profiling for quality assessment
+- Rooms for multi-document analysis
+- Evidence bundles for decision support
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import upload, extraction, feedback, documents, processing_runs, step_runs, claims, document_profiles, rooms, evidence
+from app.routers import (
+    upload,
+    documents,
+    document_profiles,
+    rooms,
+    processing_runs,
+    step_runs,
+    claims,
+    evidence,
+    extraction,  # Legacy: Direct extraction endpoint
+    feedback,  # Legacy: HITL feedback endpoint
+)
 from app.config import get_settings
 import logging
 
@@ -16,8 +42,8 @@ settings = get_settings()
 # Initialize FastAPI app
 app = FastAPI(
     title=settings.app_name,
-    description="API for extracting structured data from PDF regions using GCP Document AI",
-    version="1.0.0",
+    description="Document processing API with BigQuery persistence and Document AI integration",
+    version="2.0.0",
     debug=settings.debug
 )
 
@@ -25,15 +51,15 @@ app = FastAPI(
 logger.info(f"CORS Origins: {settings.cors_origins}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Temporary: allow all origins for testing
+    allow_origins=["*"],  # TODO: Restrict to specific origins in production
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
 )
 
-# Include routers
+# Core API routers (BigQuery-backed)
 app.include_router(upload.router)
 app.include_router(documents.router)
 app.include_router(document_profiles.router)
@@ -42,6 +68,8 @@ app.include_router(processing_runs.router)
 app.include_router(step_runs.router)
 app.include_router(claims.router)
 app.include_router(evidence.router)
+
+# Legacy routers (Firestore-backed, for backward compatibility)
 app.include_router(extraction.router)
 app.include_router(feedback.router)
 

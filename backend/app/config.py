@@ -1,3 +1,24 @@
+"""
+Application Configuration
+
+Environment-based configuration using Pydantic Settings.
+Loads configuration from environment variables with sensible defaults.
+
+Environment Variables:
+    GCP_PROJECT_ID: GCP project ID (required)
+    GCP_LOCATION: GCP region (default: us)
+    GCS_BUCKET_NAME: Cloud Storage bucket name (required)
+    BIGQUERY_DATASET: BigQuery dataset name (default: data_hero)
+    API_KEY: API authentication key
+    CORS_ORIGINS: Comma-separated list of allowed CORS origins
+    
+Usage:
+    from app.config import get_settings
+    
+    settings = get_settings()
+    print(settings.gcp_project_id)
+"""
+
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 from functools import lru_cache
