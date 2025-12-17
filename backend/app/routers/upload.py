@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Header, Request, Depends, UploadFile, File
-from app.models.api import UploadResponse, DocumentUploadRequest, DocumentUploadResponse
+from app.models.api import UploadResponse, DocumentUploadResponse
 from app.services.storage import storage_service
 from app.services.bigquery import BigQuery
 from app.dependencies import get_bigquery_service
@@ -63,7 +63,6 @@ async def upload_document(
         if was_duplicate:
             logger.info(f"Content hash {content_hash} already exists - reusing DocumentVersion")
             gcs_uri = existing_version["gcs_uri"]
-            existing_doc_id = existing_version["document_id"]
         else:
             # Upload new content to GCS
             logger.info(f"New content hash {content_hash} - uploading to GCS")
@@ -128,7 +127,7 @@ async def upload_document(
         
     except Exception as e:
         logger.error(f"Error uploading document: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate-url", response_model=UploadResponse)
@@ -157,4 +156,4 @@ async def generate_upload_url(
         )
     except Exception as e:
         logger.error(f"Error generating upload URL: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

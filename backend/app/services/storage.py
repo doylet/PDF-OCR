@@ -64,7 +64,7 @@ class Storage:
         blob = self.get_pdf_blob(pdf_id)
         return blob.download_as_bytes()
     
-    def upload_result(self, job_id: str, content: str, format: str, suffix: str = "") -> str:
+    def upload_result(self, job_id: str, content: str, file_format: str, suffix: str = "") -> str:
         """Upload extraction result and return public URL"""
         blob_name = f"{settings.gcs_results_folder}/{job_id}/result{suffix}.{format}"
         

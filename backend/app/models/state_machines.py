@@ -88,7 +88,6 @@ class StepRunState(str, Enum):
 
 class InvalidStateTransitionError(Exception):
     """Raised when attempting an invalid state transition"""
-    pass
 
 
 def validate_processing_run_transition(

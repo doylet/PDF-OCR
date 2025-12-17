@@ -7,7 +7,7 @@ These represent core business concepts independent of storage.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from enum import Enum
 
 from app.models.state_machines import ProcessingRunState
@@ -173,8 +173,7 @@ class ProcessingRun:
     def can_transition_to(self, new_status: ProcessingRunState) -> bool:
         """Check if transition to new status is valid."""
         # Delegate to state machine validation
-        from app.models.state_machines import ProcessingRunState as PRS
-        valid_next = PRS.valid_transitions().get(self.status, set())
+        valid_next = ProcessingRunState.valid_transitions().get(self.status, set())
         return new_status in valid_next
     
     def is_terminal(self) -> bool:

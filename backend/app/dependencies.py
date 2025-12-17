@@ -8,7 +8,6 @@ from app.config import get_settings
 from typing import Optional
 import logging
 import os
-import json
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
