@@ -1,16 +1,18 @@
-from google.cloud import storage
-from app.config import get_settings
-from app.dependencies import get_storage_client
+# Service module for Cloud Storage operations
 import uuid
 import logging
 from typing import Tuple
 from datetime import timedelta
 
+from google.cloud import storage
+from app.config import get_settings
+from app.dependencies import get_storage_client
+
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class StorageService:
+class Storage:
     """Service for Cloud Storage operations"""
     
     def __init__(self):
@@ -64,7 +66,7 @@ class StorageService:
         blob = self.get_pdf_blob(pdf_id)
         return blob.download_as_bytes()
     
-    def upload_result(self, job_id: str, content: str, format: str, suffix: str = "") -> str:
+    def upload_result(self, job_id: str, content: str, file_format: str, suffix: str = "") -> str:
         """Upload extraction result and return public URL"""
         blob_name = f"{settings.gcs_results_folder}/{job_id}/result{suffix}.{format}"
         
@@ -112,4 +114,4 @@ class StorageService:
         return debug_url
 
 
-storage_service = StorageService()
+storage_service = Storage()

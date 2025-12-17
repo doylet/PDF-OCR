@@ -1,20 +1,32 @@
-# PDF-OCR MVP - Region-Based Data Extraction
+# PDF-OCR - Document Processing Platform
 
-A complete MVP for extracting structured data from PDF regions using GCP Document AI.
+Enterprise-grade document processing using GCP Document AI, BigQuery, and multi-agent AI.
+
+## Features
+
+- ✅ Document versioning with SHA-256 deduplication
+- ✅ Processing pipeline with state machine tracking
+- ✅ Claims extraction with HITL feedback
+- ✅ Document quality profiling and role classification
+- ✅ Multi-document workspace management (Rooms)
+- ✅ Evidence search and bundle creation
+- ✅ Agentic AI processing with structure validation
 
 ## Documentation
 
-📖 **[Full Documentation](docs/)** - Architecture, guides, and specifications
-- [Architecture](docs/architecture/) - System design and implementation details
-- [Setup Guides](docs/guides/) - Quickstart, deployment, and CI/CD setup
-- [Roadmap](roadmap.md) - Product roadmap and feature planning
-- [Feature Specs](specs/) - Detailed feature specifications and implementation plans
+📖 **[Full Documentation](docs/)** - Implementation details, guides, and architecture
+- [Implementation Complete](docs/IMPLEMENTATION_COMPLETE.md) - Current status and features
+- [Project Structure](PROJECT_STRUCTURE.md) - Codebase organization
+- [Demo Guide](docs/README_DEMO.md) - Interactive demonstration
+- [Architecture](docs/architecture/) - System design
+- [Roadmap](docs/roadmap.md) - Future plans
 
 ## Architecture
 
-- **Frontend**: Next.js 14+ with PDF.js for rendering and canvas-based region selection
-- **Backend**: FastAPI microservice for stateful PDF processing
-- **GCP Services**: Document AI, Cloud Storage, Cloud Run, Firestore, Cloud Tasks
+- **Frontend**: Next.js 14+ with PDF.js for PDF rendering and region selection
+- **Backend**: FastAPI with BigQuery persistence and Document AI integration
+- **GCP Services**: Document AI, BigQuery, Cloud Storage, Cloud Run
+- **AI Pipeline**: Multi-agent orchestration with layout, table, and schema agents
 
 ## Project Structure
 

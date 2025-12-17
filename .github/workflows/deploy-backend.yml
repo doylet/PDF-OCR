@@ -35,19 +35,41 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Configure Docker
+        run: gcloud auth configure-docker
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -f backend/Dockerfile \
+            backend/
+
+      - name: Push Docker image
+        run: docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+
       - name: Deploy to Cloud Run
-        working-directory: ./backend
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --source . \
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --memory 1Gi \
+            --memory 2Gi \
+            --cpu 2 \
             --timeout 300 \
             --max-instances 10 \
             --min-instances 0 \
-            --set-env-vars "GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_PROCESSOR_ID=${{ secrets.GCP_PROCESSOR_ID }},GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},API_KEY=${{ secrets.API_KEY }},GCP_LOCATION=us,FIRESTORE_COLLECTION=extraction_jobs,CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
+            --set-env-vars GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_LOCATION=us,GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},BIGQUERY_DATASET=data_hero,TASK_QUEUE_NAME=extraction-queue,API_BASE_URL=https://pdf-ocr-api-785693222332.us-central1.run.app,GCP_PROCESSOR_ID=${{ secrets.GCP_PROCESSOR_ID }},FIRESTORE_COLLECTION=extraction_jobs,CORS_ORIGINS=${{ secrets.CORS_ORIGINS }},DEBUG=false \
+            --set-secrets API_KEY=pdf-ocr-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest \
+            --service-account pdf-ocr-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Show deployment info
+        run: |
+          gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)'
 
       - name: Get Service URL
         id: service

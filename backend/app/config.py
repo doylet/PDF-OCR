@@ -1,3 +1,24 @@
+"""
+Application Configuration
+
+Environment-based configuration using Pydantic Settings.
+Loads configuration from environment variables with sensible defaults.
+
+Environment Variables:
+    GCP_PROJECT_ID: GCP project ID (required)
+    GCP_LOCATION: GCP region (default: us)
+    GCS_BUCKET_NAME: Cloud Storage bucket name (required)
+    BIGQUERY_DATASET: BigQuery dataset name (default: data_hero)
+    API_KEY: API authentication key
+    CORS_ORIGINS: Comma-separated list of allowed CORS origins
+    
+Usage:
+    from app.config import get_settings
+    
+    settings = get_settings()
+    print(settings.gcp_project_id)
+"""
+
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 from functools import lru_cache
@@ -20,13 +41,18 @@ class Settings(BaseSettings):
     gcs_pdf_folder: str = "pdfs"
     gcs_results_folder: str = "results"
     
-    # Firestore
+    # Firestore (DEPRECATED - migrating to BigQuery)
     firestore_collection: str = "extraction_jobs"
     
+    # BigQuery
+    bigquery_dataset: str = "data_hero"
+    
     # Cloud Tasks
+    task_queue_name: str = "extraction-queue"
     cloud_tasks_queue: str = "extraction-queue"
     cloud_tasks_location: str = "us-central1"
-    worker_service_url: str = "https://placeholder.run.app"
+    worker_service_url: str = "http://localhost:8000"
+    api_base_url: str = "https://pdf-ocr-api-785693222332.us-central1.run.app"
     
     # LLM Configuration (Google Gemini)
     gemini_api_key: str = ""  # Optional - enables agentic features
@@ -65,4 +91,6 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
+    """Get application settings"""
+
     return Settings()

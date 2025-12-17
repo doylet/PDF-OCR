@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class DocumentAIService:
+class DocumentAI:
     """Service for Document AI processing"""
     
     def __init__(self):
@@ -151,7 +151,7 @@ class DocumentAIService:
     
     def process_regions(self, pdf_bytes: bytes, regions: List[Region], job_id: str = None) -> List[ExtractionResult]:
         """Process multiple regions and return extraction results"""
-        from app.services.table_extractor import TableExtractionService
+        from app.services.table_extractor import TableExtractor
         from app.services.text_parser import TextParser
         from app.services.storage import storage_service
         from app.services.region_analyzer import RegionAnalyzer, RegionType
@@ -161,7 +161,7 @@ class DocumentAIService:
         for idx, region in enumerate(regions):
             try:
                 # First attempt: Try Camelot for table extraction
-                camelot_tables = TableExtractionService.extract_tables_from_region(
+                camelot_tables = TableExtractor.extract_tables_from_region(
                     pdf_bytes,
                     region.page,
                     region.x,
@@ -170,12 +170,27 @@ class DocumentAIService:
                     region.height
                 )
                 
-                if camelot_tables:
+                if (camelot_tables and 
+                    hasattr(camelot_tables, '__iter__') and 
+                    not isinstance(camelot_tables, str) and
+                    len(camelot_tables) > 0):
                     # Successfully extracted table with Camelot
                     logger.info(f"Camelot extracted {len(camelot_tables)} rows from region {idx}")
                     
-                    # Convert to text representation
-                    text = "\n".join(["\t".join(row) for row in camelot_tables])
+                    # Convert to text representation - ensure each row is also iterable
+                    text_rows = []
+                    # Ensure camelot_tables is iterable
+                    if hasattr(camelot_tables, '__iter__') and not isinstance(camelot_tables, str):
+                        for row in camelot_tables:
+                            if hasattr(row, '__iter__') and not isinstance(row, str):
+                                row_text = "\t".join(str(cell) for cell in row)
+                            else:
+                                row_text = str(row)
+                            text_rows.append(row_text)
+                    else:
+                        # If not iterable, treat as single item
+                        text_rows.append(str(camelot_tables))
+                    text = "\n".join(text_rows)
                     
                     result = ExtractionResult(
                         region_index=idx,
@@ -274,4 +289,4 @@ class DocumentAIService:
         return results
 
 
-documentai_service = DocumentAIService()
+documentai_service = DocumentAI()

@@ -9,7 +9,7 @@ import re
 logger = logging.getLogger(__name__)
 
 
-class FormatterService:
+class Formatter:
     """Service for formatting extraction results"""
     
     @staticmethod
@@ -109,4 +109,4 @@ class FormatterService:
         return json.dumps(output, indent=2)
 
 
-formatter_service = FormatterService()
+formatter_service = Formatter()

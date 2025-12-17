@@ -1,5 +1,6 @@
 from google.cloud import storage
 from google.cloud import firestore
+from google.cloud import bigquery
 from google.cloud import documentai_v1 as documentai
 from google.cloud import tasks_v2
 from google.oauth2 import service_account
@@ -7,7 +8,6 @@ from app.config import get_settings
 from typing import Optional
 import logging
 import os
-import json
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -18,6 +18,7 @@ class GCPClients:
     
     _storage_client: Optional[storage.Client] = None
     _firestore_client: Optional[firestore.Client] = None
+    _bigquery_client: Optional[bigquery.Client] = None
     _documentai_client: Optional[documentai.DocumentProcessorServiceClient] = None
     _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
     _credentials: Optional[service_account.Credentials] = None
@@ -55,6 +56,18 @@ class GCPClients:
         return cls._firestore_client
     
     @classmethod
+    def get_bigquery_client(cls) -> bigquery.Client:
+        if cls._bigquery_client is None:
+            credentials = cls.get_credentials()
+            if credentials:
+                cls._bigquery_client = bigquery.Client(project=settings.gcp_project_id, credentials=credentials)
+                logger.info("Initialized BigQuery client with service account credentials")
+            else:
+                cls._bigquery_client = bigquery.Client(project=settings.gcp_project_id)
+                logger.info("Initialized BigQuery client with default credentials")
+        return cls._bigquery_client
+    
+    @classmethod
     def get_documentai_client(cls) -> documentai.DocumentProcessorServiceClient:
         if cls._documentai_client is None:
             cls._documentai_client = documentai.DocumentProcessorServiceClient()
@@ -77,6 +90,10 @@ def get_firestore_client() -> firestore.Client:
     return GCPClients.get_firestore_client()
 
 
+def get_bigquery_client() -> bigquery.Client:
+    return GCPClients.get_bigquery_client()
+
+
 def get_documentai_client() -> documentai.DocumentProcessorServiceClient:
     return GCPClients.get_documentai_client()
 
@@ -86,6 +103,12 @@ def get_tasks_client() -> tasks_v2.CloudTasksClient:
 
 
 def get_firestore_service():
-    """Dependency for FirestoreService"""
-    from app.services.firestore_service import FirestoreService
-    return FirestoreService(get_firestore_client())
+    """Dependency for Firestore"""
+    from app.services.firestore import Firestore
+    return Firestore(get_firestore_client())
+
+
+def get_bigquery_service():
+    """Dependency for BigQuery"""
+    from app.services.bigquery import BigQuery
+    return BigQuery(get_bigquery_client())

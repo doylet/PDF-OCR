@@ -25,7 +25,7 @@ from app.models.document_graph import (
     DocumentGraph, Extraction, AgentDecision,
     ValidationStatus, TokenType
 )
-from app.services.llm_service import LLMService, LLMRole
+from app.services.llm import LLM, LLMRole
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -44,12 +44,12 @@ class ValidatorAgent:
     MIN_TABLE_ROWS = 1
     MAX_TABLE_ROWS = 10000
     
-    def __init__(self, llm_service: Optional[LLMService] = None):
+    def __init__(self, llm_service: Optional[LLM] = None):
         """
         Args:
             llm_service: Optional LLM service for semantic validation
         """
-        self.llm_service = llm_service or LLMService() if settings.enable_llm_agents else None
+        self.llm_service = llm_service or LLM() if settings.enable_llm_agents else None
         self.use_llm = settings.enable_llm_agents and self.llm_service is not None
     
     def validate_extraction(self, graph: DocumentGraph, extraction: Extraction) -> AgentDecision:
@@ -144,9 +144,13 @@ class ValidatorAgent:
             return {"is_valid": True, "confidence": 1.0, "issues": [], "suggestions": []}
         
         try:
+            # Get region to determine region_type
+            region = next((r for r in graph.regions if r.region_id == extraction.region_id), None)
+            region_type = region.region_type.value if region else "unknown"
+            
             result = self.llm_service.validate_extraction(
                 extraction_data=extraction.data,
-                region_type=extraction.region_type,
+                region_type=region_type,
                 document_type=graph.metadata.get("document_type", "unknown"),
                 schema=extraction.schema
             )
